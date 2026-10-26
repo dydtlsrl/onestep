@@ -188,6 +188,7 @@ erDiagram
         int gross_amount "지급 총액"
         enum tax_type "other_income, business_income, none, custom"
         numeric tax_rate "적용 세율 (저장 당시)"
+        int tax_rule_version "적용 계산 규칙 버전"
         int income_tax "소득세"
         int local_tax "지방소득세"
         int net_amount "실지급액"
@@ -210,11 +211,12 @@ erDiagram
     }
 ```
 
-다음 두 테이블은 다른 테이블과 직접 연결되지 않아 그림에서 뺐다.
+다음 테이블은 핵심 업무 흐름과 직접 연결되지 않아 그림에서 뺐다.
 
 | 테이블 | 용도 | 주요 컬럼 |
 |---|---|---|
-| `app_settings` | PRD의 설정(SET-01~08) 값 | `key` (PK), `value` (jsonb), `updated_by`, `updated_at` |
+| `app_settings` | PRD의 현재 설정(SET-01~08) 값 | `key` (PK), `value` (jsonb), `version`, `effective_from`, `updated_by`, `updated_at` |
+| `app_settings_history` | 세목·지급일 등 설정의 변경 이력 | `id`, `key`, `value` (jsonb), `version`, `effective_from`, `changed_by`, `change_reason`, `changed_at` |
 | `audit_logs` | 민감정보 열람, 이체 엑셀 다운로드, 등급·제한 변경 기록 | `id`, `actor_id`, `action`, `target_type`, `target_id`, `detail` (jsonb), `created_at` |
 
 ## 2. 설계 원칙
@@ -232,7 +234,7 @@ erDiagram
 |---|---|---|
 | `event_positions` | `role_name`, `rate` | 단가표를 바꿔도 지난 일정 단가는 그대로 |
 | `contracts` | `body_snapshot`, `document_hash` | 양식을 고쳐도 서명한 계약서 내용은 그대로, 위·변조 확인 가능 |
-| `payments` | `tax_type`, `tax_rate`, 세액 | 세목 설정을 바꿔도 과거 지급 내역은 그대로 |
+| `payments` | `tax_type`, `tax_rate`, `tax_rule_version`, 세액 | 세목·계산 규칙을 바꿔도 과거 지급 내역은 그대로 |
 
 ### 2.3 상태값
 
@@ -255,7 +257,7 @@ erDiagram
 | 테이블 | 관리자 | 회원 본인 | 다른 회원 |
 |---|---|---|---|
 | `profiles` | 전체 읽기·쓰기 | 자기 행 읽기, 일부 수정 (이름·연락처·지역·경력) | 불가 |
-| `member_private` | 서버를 통해서만 (열람 기록) | 자기 행 입력·수정, 마스킹 값만 읽기 | 불가 |
+| `member_private` | 서버를 통해서만 (열람 기록) | 서버를 통해 자기 정보 입력·수정, 마스킹 값만 읽기 | 불가 |
 | `invites` | 전체 | 불가 (가입 시 서버가 코드 검증) | 불가 |
 | `member_notes` | 전체 | **불가** | 불가 |
 | `job_roles` | 전체 | 읽기 | 읽기 |
@@ -268,7 +270,10 @@ erDiagram
 | `payments` | 전체 | 자기 내역 읽기 | 불가 |
 | `notifications` | 생성 | 자기 알림 읽기·읽음 처리 | 불가 |
 | `app_settings` | 전체 | 불가 | 불가 |
+| `app_settings_history` | 읽기 | 불가 | 불가 |
 | `audit_logs` | 읽기 (쓰기는 서버만) | 불가 | 불가 |
+
+`member_private`는 행 단위 보안만으로 암호문·마스킹 컬럼의 읽기 권한을 나눌 수 없다. 회원에게 원본 테이블의 직접 조회 권한을 주지 않고, 서버 경로 또는 필요한 마스킹 컬럼만 노출하는 별도 인터페이스로 제공한다. 관리자 키는 서버에서만 사용하고, 서버 경로에서 대표 권한 확인과 열람 기록을 남긴다.
 
 **일정 공개 규칙**
 - 회원 상태가 `active`가 아니면 일정을 하나도 볼 수 없다.
