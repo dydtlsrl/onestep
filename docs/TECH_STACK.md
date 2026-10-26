@@ -93,7 +93,7 @@ Vercel을 쓰는 경우 Hobby의 비상업적 사용 제한을 확인한다. 회
 
 Supabase Free에는 무료 사용량 쿼터(DB 500MB, 월 활성 사용자 5만 명 등)가 있지만, 이 숫자만으로 550명 규모의 운영 적합성을 판단할 수 없다. 사용량이 적은 무료 프로젝트는 7일 동안의 활동을 기준으로 일시정지될 수 있으며, Free에는 자동 일일 DB 백업이 없다. 직접 백업할 경우 복구 시험도 필요하다. Supabase의 DB 백업에는 Storage에 저장한 계약서 PDF·서명 파일 자체가 포함되지 않으므로 파일 백업·복구 방법을 별도로 마련한다.
 
-이전의 “월 약 $45”는 Vercel Pro와 Supabase Pro의 기본요금을 단순 합산한 예시일 뿐이다. 실제 청구액은 선택한 호스팅, 결제 단위, 프로젝트 수, 사용량, 환율·세금, 도메인·발송비에 따라 달라진다. 가격·정책은 가입 및 실제 데이터 투입 직전에 다시 확인한다.
+참고로 Vercel Pro와 Supabase Pro를 함께 쓰면 기본요금만 월 약 $45이다. 실제 청구액은 선택한 호스팅, 결제 단위, 프로젝트 수, 사용량, 환율·세금, 도메인·발송비에 따라 달라진다. 가격·정책은 가입 및 실제 데이터 투입 직전에 다시 확인한다.
 
 공식 확인 자료: [Vercel 요금제](https://vercel.com/docs/plans/hobby) · [Supabase 요금](https://supabase.com/docs/guides/platform/billing-on-supabase) · [무료 프로젝트 일시정지](https://supabase.com/docs/guides/platform/free-project-pausing) · [백업 범위](https://supabase.com/docs/guides/platform/backups)
 
