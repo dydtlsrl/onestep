@@ -10,10 +10,9 @@
 | [ERD](./docs/ERD.md) | 데이터 구조와 접근 권한 |
 | [기술 스택](./docs/TECH_STACK.md) | 사용 기술, 보안 설계, 운영비 |
 | [회의록](./docs/meeting-notes.md) | 회의별 결정 사항 |
-| [대표님 사용 안내](./docs/guide-admin.md) | 대표 화면 메뉴별 사용법과 체험 순서 |
-| [인력 사용 설명서](./docs/guide-member.md) | 가입·신청·계약 서명·정산 확인 (인력에게 전달용) |
-| [피드백 질문지](./docs/feedback-form.md) | 대표님 체험 후 틀린 것·불편한 것·원하는 것 |
-| [결정 필요 사항](./docs/decisions.md) | 대표님이 정하거나 주셔야 할 것 (세금, 계약서, 계정 등) |
+| [대표님용 PDF 3종](./docs/for-ceo) | 사용 안내(화면 캡처), 정해 주실 것, 의견 질문지. 대표님께 그대로 전달 |
+| [인력 사용 설명서](./docs/guide-member.md) | 가입·신청·계약 서명·정산 확인 (인력에게 전달용, 쉬운 PDF로 다시 만들 예정) |
+| [결정 필요 사항 전체 목록](./docs/decisions.md) | 개발자용 전체 목록 33개. 대표님께는 PDF 「정해 주실 것」으로 추린 것만 전달 |
 | [배포하기](./docs/deploy.md) | Netlify 무료 배포, 로그인 주소 등록 |
 | [DB 백업하기](./docs/backup.md) | DBeaver로 백업·복원 시험 |
 

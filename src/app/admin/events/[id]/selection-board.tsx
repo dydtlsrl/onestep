@@ -164,7 +164,7 @@ export function SelectionBoard({
   const selectable = visible.filter((a) => a.status !== "cancelled");
   const allChecked = selectable.length > 0 && selectable.every((a) => checked.has(a.id));
   const memberChoices = members.filter((m) => m.label.includes(memberQuery.trim()));
-  const columns = multiDay ? 10 : 9;
+  const columns = multiDay ? 6 : 5;
 
   function toggle(id: string) {
     setChecked((prev) => {
@@ -247,7 +247,7 @@ export function SelectionBoard({
       <Message state={decideState} />
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white">
-        <table className="w-full min-w-[1100px] border-collapse text-sm">
+        <table className="w-full min-w-[820px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-[#f8f9fa] text-left text-[13px] text-body">
               <th scope="col" className="w-10 py-3 pl-4">
@@ -264,11 +264,7 @@ export function SelectionBoard({
               <th scope="col" className="px-3 py-3 font-bold">이름</th>
               {multiDay && <th scope="col" className="px-3 py-3 font-bold">날짜</th>}
               <th scope="col" className="px-3 py-3 font-bold">역할 · 단가</th>
-              <th scope="col" className="px-3 py-3 text-right font-bold">참여</th>
-              <th scope="col" className="px-3 py-3 font-bold">노쇼·지각</th>
-              <th scope="col" className="px-3 py-3 font-bold">최근 기록 (대표만 보임)</th>
-              <th scope="col" className="px-3 py-3 font-bold">신청</th>
-              <th scope="col" className="px-3 py-3 font-bold">상태</th>
+              <th scope="col" className="px-3 py-3 font-bold">이력 (대표만 보임)</th>
               <th scope="col" className="px-4 py-3 font-bold">처리</th>
             </tr>
           </thead>
@@ -300,11 +296,12 @@ export function SelectionBoard({
                       {a.participation === 0 && <span className="rounded bg-warn-soft px-1.5 py-0.5 text-[11px] font-bold text-warn">첫 참여</span>}
                       {a.addedByAdmin && <span className="text-[11px] text-muted">직접 추가</span>}
                     </div>
+                    <span className="text-[12px] text-muted">신청 {a.appliedAt}</span>
                   </td>
                   {multiDay && <td className="whitespace-nowrap px-3 py-3 font-bold">{a.dayLabel}</td>}
                   <td className="px-3 py-3">
                     <div className="flex items-center gap-2">
-                      <span className="flex flex-col">
+                      <span className="flex flex-col whitespace-nowrap">
                         <span className={a.roleName ? "font-bold" : "text-muted"}>{a.roleName || "역할 미정"}</span>
                         <span className={`text-[12px] ${a.rateOverride !== null ? "font-bold text-brand-strong" : "text-muted"}`}>{a.rateText}</span>
                       </span>
@@ -320,24 +317,28 @@ export function SelectionBoard({
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-3 text-right">{a.participation}회</td>
-                  <td className="whitespace-nowrap px-3 py-3">
-                    {a.noShow + a.late > 0 ? (
-                      <span className="font-bold text-warn">
-                        노쇼 {a.noShow} · 지각 {a.late}
+                  <td className="max-w-[260px] px-3 py-3">
+                    <span className="flex flex-wrap gap-x-2 whitespace-nowrap">
+                      <span>참여 {a.participation}회</span>
+                      {a.noShow + a.late > 0 && (
+                        <span className="font-bold text-warn">
+                          노쇼 {a.noShow} · 지각 {a.late}
+                        </span>
+                      )}
+                    </span>
+                    {a.lastNote && (
+                      <span className="block truncate text-[12px] text-muted" title={a.lastNote}>
+                        {a.lastNote}
                       </span>
-                    ) : (
-                      <span className="text-muted">없음</span>
                     )}
                   </td>
-                  <td className="max-w-[180px] truncate px-3 py-3 text-muted" title={a.lastNote}>
-                    {a.lastNote || "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-3 text-muted">{a.appliedAt}</td>
-                  <td className="px-3 py-3">
-                    <span className={`whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-bold ${APPLICATION_BADGE[a.status]}`}>{APPLICATION_STATUS_LABEL[a.status]}</span>
-                  </td>
                   <td className="px-4 py-2">
+                    {a.status === "cancelled" && (
+                      <span className={`whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-bold ${APPLICATION_BADGE[a.status]}`}>{APPLICATION_STATUS_LABEL[a.status]}</span>
+                    )}
+                    {!editable && a.status !== "cancelled" && (
+                      <span className={`whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-bold ${APPLICATION_BADGE[a.status]}`}>{APPLICATION_STATUS_LABEL[a.status]}</span>
+                    )}
                     {editable && a.status !== "cancelled" && (
                       <div className="flex gap-1">
                         {DECISIONS.map((d) => {
