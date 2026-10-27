@@ -30,7 +30,8 @@ reset role;
 
 select tests.act_as('00000000-0000-0000-0000-00000000002b');
 set role authenticated;
-select tests.expect_count('select * from public.app_settings', 0, '회원: 설정이 보이지 않음');
+-- 2단계부터 활동 회원은 예상 보수 계산을 위해 보수 계산 규칙(pay_rules)만 볼 수 있다
+select tests.expect_count($$select * from public.app_settings where key <> 'pay_rules'$$, 0, '회원: 보수 계산 규칙 말고는 설정이 보이지 않음');
 select tests.expect_count('select * from public.app_settings_history', 0, '회원: 설정 이력이 보이지 않음');
 select tests.expect_error($$select public.update_pay_rules(2, 30, 'ceil', 4, '')$$, 'NOT_ADMIN');
 select tests.expect_error($$update public.app_settings set value = '{}'$$, 'permission denied%');

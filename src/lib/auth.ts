@@ -1,10 +1,12 @@
 // 지금 로그인한 사람과 회원 정보를 읽는다. 서버에서만 쓴다.
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import type { MemberTier } from "@/lib/tier";
+
+export { TIER_LABEL, type MemberTier } from "@/lib/tier";
 
 export type MemberRole = "admin" | "member";
 export type MemberStatus = "pending" | "active" | "rejected" | "restricted" | "withdrawn";
-export type MemberTier = "core" | "general";
 
 export interface Profile {
   id: string;
@@ -52,4 +54,11 @@ export async function requireAdmin() {
   return member as typeof member & { userId: string; profile: Profile };
 }
 
-export const TIER_LABEL: Record<MemberTier, string> = { core: "핵심", general: "일반" };
+// 회원 화면 앞에서 부른다. 승인된 활동 회원(대표 포함)만 통과한다.
+export async function requireMember(path = "/") {
+  const member = await getCurrentMember();
+  if (!member.userId) redirect(`/login?next=${encodeURIComponent(path)}`);
+  if (!member.profile) redirect("/");
+  if (member.profile.status !== "active") redirect("/pending");
+  return member as typeof member & { userId: string; profile: Profile };
+}
