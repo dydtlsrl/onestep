@@ -17,6 +17,7 @@ erDiagram
     events ||--o{ member_notes : "관련 일정"
     clients ||--o{ events : "의뢰"
     events ||--|{ event_positions : "모집 역할"
+    events ||--o{ event_extra_rules : "추가 지급 기본값"
     job_roles ||--o{ event_positions : "단가표 참조"
     events ||--o{ applications : "신청 받음"
     event_positions ||--o{ applications : "역할 선택"
@@ -199,10 +200,19 @@ erDiagram
         timestamptz created_at
     }
 
+    event_extra_rules {
+        uuid id PK
+        uuid event_id FK
+        enum type "transport, regional"
+        enum tier "all, core, general"
+        int amount "1인당 금액 (원)"
+    }
+
     payment_extras {
         uuid id PK
         uuid payment_id FK
         enum type "transport, regional, overtime, other"
+        enum source "event_rule, manual"
         int amount "금액 (원)"
         text memo "사유 (예: 연장 1시간)"
         uuid created_by FK
@@ -225,7 +235,7 @@ erDiagram
 
 | 테이블 | 용도 | 주요 컬럼 |
 |---|---|---|
-| `app_settings` | PRD의 현재 설정(SET-01~08) 값 | `key` (PK), `value` (jsonb), `version`, `effective_from`, `updated_by`, `updated_at` |
+| `app_settings` | PRD의 현재 설정(SET-01~11) 값. 지방비 기본표(SET-10), 직인 이미지 위치(SET-11) 포함 | `key` (PK), `value` (jsonb), `version`, `effective_from`, `updated_by`, `updated_at` |
 | `app_settings_history` | 세목·지급일 등 설정의 변경 이력 | `id`, `key`, `value` (jsonb), `version`, `effective_from`, `changed_by`, `change_reason`, `changed_at` |
 | `audit_logs` | 민감정보 열람, 이체 엑셀 다운로드, 등급·제한 변경 기록 | `id`, `actor_id`, `action`, `target_type`, `target_id`, `detail` (jsonb), `created_at` |
 
@@ -243,6 +253,8 @@ erDiagram
 | 테이블 | 저장하는 값 | 이유 |
 |---|---|---|
 | `event_positions` | `role_name`, `rate` | 단가표를 바꿔도 지난 일정 단가는 그대로 |
+| `event_extra_rules` | `amount` | 지방비 기본표를 바꿔도 이미 등록한 일정의 금액은 그대로 |
+| `payment_extras` | `amount`, `source` | 일정의 기본값을 나중에 바꿔도 이미 만든 지급 항목은 그대로. 자동으로 붙은 것인지 대표가 넣은 것인지 구분 |
 | `contracts` | `body_snapshot`, `document_hash` | 양식을 고쳐도 서명한 계약서 내용은 그대로, 위·변조 확인 가능 |
 | `payments` | `tax_type`, `tax_rate`, `tax_rule_version`, 세액 | 세목·계산 규칙을 바꿔도 과거 지급 내역은 그대로 |
 
@@ -274,6 +286,7 @@ erDiagram
 | `clients` | 전체 | **불가** | 불가 |
 | `events` | 전체 | 공개된 일정만 읽기 (고객사 제외한 보기 화면 사용) | 같음 |
 | `event_positions` | 전체 | 공개된 일정의 것만 읽기 | 같음 |
+| `event_extra_rules` | 전체 | 공개된 일정의 것만 읽기 (화면에는 자기 등급 금액만) | 같음 |
 | `applications` | 전체 | 자기 신청 읽기·생성·취소 | 불가 (남은 자리 수만 공개) |
 | `contract_templates` | 전체 | 불가 | 불가 |
 | `contracts` | 전체 | 자기 계약 읽기·서명 | 불가 |
