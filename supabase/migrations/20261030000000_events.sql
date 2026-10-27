@@ -31,7 +31,6 @@ create table public.events (
   location_name text not null default '' check (char_length(location_name) <= 80),
   address text not null default '' check (char_length(address) <= 200),
   notice text not null default '' check (char_length(notice) <= 2000),
-  chat_link text not null default '' check (chat_link = '' or (chat_link ~ '^https://' and char_length(chat_link) <= 300)),
   status public.event_status not null default 'draft',
   apply_deadline timestamptz,
   pay_date date,
@@ -60,6 +59,12 @@ create table public.event_internal (
   event_id uuid primary key references public.events (id) on delete cascade,
   client_name text not null default '' check (char_length(client_name) <= 60),
   memo text not null default '' check (char_length(memo) <= 1000)
+);
+
+-- 확정자 톡방 링크. 대표와, 확정 알림을 받은 회원만 본다.
+create table public.event_chat_links (
+  event_id uuid primary key references public.events (id) on delete cascade,
+  chat_link text not null default '' check (chat_link = '' or (chat_link ~ '^https://' and char_length(chat_link) <= 300))
 );
 
 -- 모집 역할. 등록할 때의 단가표 값을 복사해 둔다.
@@ -137,6 +142,15 @@ create index notifications_user_idx on public.notifications (user_id, created_at
 alter table public.member_notes
   add column event_id uuid references public.events (id) on delete set null,
   add column auto_source text check (auto_source is null or auto_source in ('attendance'));
+
+-- 회원별 실제 참여 횟수 (확정되고 참석·지각으로 확인된 일정). 보는 사람의 권한 규칙을 그대로 따른다.
+create view public.member_participation
+with (security_invoker = true)
+as
+select member_id, count(*) as attended_count
+from public.applications
+where status = 'selected' and attendance in ('attended', 'late')
+group by member_id;
 
 
 -- 도우미 함수 ------------------------------------------------------------------
@@ -221,7 +235,7 @@ begin
   begin
     insert into public.events (
       type, title, event_date, gather_time, start_time, end_time, location_name, address,
-      notice, chat_link, apply_deadline, pay_date, created_by
+      notice, apply_deadline, pay_date, created_by
     )
     values (
       (p_event ->> 'type')::public.event_type,
@@ -233,7 +247,6 @@ begin
       btrim(coalesce(p_event ->> 'location_name', '')),
       btrim(coalesce(p_event ->> 'address', '')),
       btrim(coalesce(p_event ->> 'notice', '')),
-      btrim(coalesce(p_event ->> 'chat_link', '')),
       nullif(p_event ->> 'apply_deadline', '')::timestamptz,
       nullif(p_event ->> 'pay_date', '')::date,
       auth.uid()
@@ -242,6 +255,9 @@ begin
 
     insert into public.event_internal (event_id, client_name, memo)
     values (v_id, btrim(coalesce(p_client_name, '')), btrim(coalesce(p_internal_memo, '')));
+
+    insert into public.event_chat_links (event_id, chat_link)
+    values (v_id, btrim(coalesce(p_event ->> 'chat_link', '')));
 
     insert into public.event_positions (
       event_id, role_id, role_name, pay_type, rate, min_paid_hours, overtime_rate, headcount, sort_order
@@ -329,7 +345,6 @@ begin
         location_name = btrim(coalesce(p_event ->> 'location_name', '')),
         address = btrim(coalesce(p_event ->> 'address', '')),
         notice = btrim(coalesce(p_event ->> 'notice', '')),
-        chat_link = btrim(coalesce(p_event ->> 'chat_link', '')),
         apply_deadline = nullif(p_event ->> 'apply_deadline', '')::timestamptz,
         pay_date = nullif(p_event ->> 'pay_date', '')::date
     where id = p_event_id;
@@ -337,6 +352,10 @@ begin
     insert into public.event_internal (event_id, client_name, memo)
     values (p_event_id, btrim(coalesce(p_client_name, '')), btrim(coalesce(p_internal_memo, '')))
     on conflict (event_id) do update set client_name = excluded.client_name, memo = excluded.memo;
+
+    insert into public.event_chat_links (event_id, chat_link)
+    values (p_event_id, btrim(coalesce(p_event ->> 'chat_link', '')))
+    on conflict (event_id) do update set chat_link = excluded.chat_link;
 
     delete from public.event_positions
     where event_id = p_event_id and id <> all (coalesce(v_keep, '{}'));
@@ -493,7 +512,7 @@ begin
   select * into v_existing from public.applications where event_id = p_event_id and member_id = v_uid;
   if found then
     if v_existing.status <> 'cancelled' then
-      raise exception 'ALREADY_APPLIED';
+      raise exception 'ALREADY_APPLIED_EVENT';
     end if;
     -- 취소했던 신청을 다시 낸다
     update public.applications
@@ -776,12 +795,14 @@ $$;
 
 -- 권한 -----------------------------------------------------------------------
 
-revoke all on public.events, public.event_internal, public.event_positions, public.event_extra_rules,
-  public.applications, public.notifications from anon, authenticated;
+revoke all on public.events, public.event_internal, public.event_chat_links, public.event_positions,
+  public.event_extra_rules, public.applications, public.notifications from anon, authenticated;
 
-grant select on public.events, public.event_internal, public.event_positions, public.event_extra_rules,
-  public.applications, public.notifications to authenticated;
+grant select on public.events, public.event_internal, public.event_chat_links, public.event_positions,
+  public.event_extra_rules, public.applications, public.notifications to authenticated;
 grant update (read_at) on public.notifications to authenticated;
+revoke all on public.member_participation from anon, authenticated;
+grant select on public.member_participation to authenticated;
 
 revoke all on function public.can_view_event(uuid, public.event_status) from public, anon, authenticated;
 revoke all on function public.event_label(public.events) from public, anon, authenticated;
@@ -813,6 +834,7 @@ grant execute on function public.set_attendance(uuid, public.attendance_status, 
 
 alter table public.events enable row level security;
 alter table public.event_internal enable row level security;
+alter table public.event_chat_links enable row level security;
 alter table public.event_positions enable row level security;
 alter table public.event_extra_rules enable row level security;
 alter table public.applications enable row level security;
@@ -825,6 +847,19 @@ create policy "볼 수 있는 일정만 본다"
 create policy "대표만 고객사 등 내부 정보를 본다"
   on public.event_internal for select to authenticated
   using ((select public.is_admin()));
+
+create policy "대표와 확정자만 톡방 링크를 본다"
+  on public.event_chat_links for select to authenticated
+  using (
+    (select public.is_admin())
+    or exists (
+      select 1 from public.applications a
+      where a.event_id = event_chat_links.event_id
+        and a.member_id = (select auth.uid())
+        and a.status = 'selected'
+        and a.notified_status = 'selected'
+    )
+  );
 
 create policy "볼 수 있는 일정의 모집 역할만 본다"
   on public.event_positions for select to authenticated
@@ -849,6 +884,6 @@ create policy "자기 알림만 읽음 처리한다"
 
 -- 회원도 일정 상세에서 예상 보수를 볼 수 있게 보수 계산 규칙은 활동 회원에게 공개한다
 drop policy "대표만 설정을 본다" on public.app_settings;
-create policy "대표는 모든 설정을, 활동 회원은 보수 계산 규칙을 본다"
+create policy "대표는 모든 설정을, 회원은 보수 규칙만 본다"
   on public.app_settings for select to authenticated
   using ((select public.is_admin()) or (key = 'pay_rules' and (select public.is_active_member())));

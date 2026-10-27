@@ -1,12 +1,112 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Card, Notice, PageShell } from "@/components/page-shell";
+import { NotificationBell } from "@/components/notification-bell";
+import { Card, PageShell } from "@/components/page-shell";
 import { SignOutButton } from "@/components/sign-out-button";
 import { getCurrentMember, isActiveAdmin, TIER_LABEL } from "@/lib/auth";
+import {
+  MEMBER_APPLICATION_LABEL,
+  MEMBER_EVENT_STATUS_LABEL,
+  formatEventDate,
+  formatTime,
+  todayKst,
+  visibleApplicationStatus,
+  type ApplicationStatus,
+  type EventStatus,
+  type SelectedCount,
+} from "@/lib/events";
+import { formatDateTime } from "@/lib/format";
+
+type Supabase = Awaited<ReturnType<typeof getCurrentMember>>["supabase"];
+
+interface HomeEvent {
+  id: string;
+  title: string;
+  event_date: string;
+  gather_time: string | null;
+  start_time: string;
+  end_time: string;
+  location_name: string;
+  status: EventStatus;
+  apply_deadline: string | null;
+  event_positions: { id: string; role_name: string; headcount: number }[];
+}
+
+interface HomeApplication {
+  event_id: string;
+  status: ApplicationStatus;
+  notified_status: ApplicationStatus | null;
+}
+
+// 다가오는 일정 중 내 일정(신청·확정)과 지금 신청할 수 있는 일정을 나눠 불러온다
+async function loadHome(supabase: Supabase, userId: string) {
+  const now = Date.now();
+  const { data } = await supabase
+    .from("events")
+    .select("id, title, event_date, gather_time, start_time, end_time, location_name, status, apply_deadline, event_positions(id, role_name, headcount)")
+    .gte("event_date", todayKst(now))
+    .in("status", ["open_core", "open_all", "closed", "cancelled"])
+    .order("event_date")
+    .order("start_time")
+    .limit(100)
+    .returns<HomeEvent[]>();
+  const events = data ?? [];
+  const ids = events.map((e) => e.id);
+  if (ids.length === 0) return { mine: [], open: [] };
+
+  const [{ data: apps }, { data: counts }, { data: chats }] = await Promise.all([
+    supabase.from("applications").select("event_id, status, notified_status").eq("member_id", userId).in("event_id", ids).returns<HomeApplication[]>(),
+    supabase.rpc("position_selected_counts", { p_event_ids: ids }),
+    supabase.from("event_chat_links").select("event_id, chat_link").in("event_id", ids).returns<{ event_id: string; chat_link: string }[]>(),
+  ]);
+  const statusOf = new Map((apps ?? []).map((a) => [a.event_id, visibleApplicationStatus(a.status, a.notified_status)]));
+  const chatOf = new Map((chats ?? []).map((c) => [c.event_id, c.chat_link]));
+  const selectedOf = new Map<string, number>();
+  for (const c of (counts ?? []) as SelectedCount[]) selectedOf.set(c.event_id, (selectedOf.get(c.event_id) ?? 0) + c.selected_count);
+
+  const rows = events.map((e) => ({
+    ...e,
+    myStatus: statusOf.get(e.id) ?? null,
+    chatLink: chatOf.get(e.id) ?? "",
+    remaining: Math.max(0, e.event_positions.reduce((sum, p) => sum + p.headcount, 0) - (selectedOf.get(e.id) ?? 0)),
+    deadlinePassed: e.apply_deadline !== null && new Date(e.apply_deadline).getTime() <= now,
+  }));
+  return {
+    mine: rows.filter((e) => e.myStatus !== null && e.myStatus !== "cancelled"),
+    open: rows.filter((e) => (e.status === "open_core" || e.status === "open_all") && (e.myStatus === null || e.myStatus === "cancelled")),
+  };
+}
+
+type HomeRow = Awaited<ReturnType<typeof loadHome>>["mine"][number];
+
+const MY_BADGE: Record<ApplicationStatus, string> = {
+  applied: "bg-ground text-body",
+  waitlisted: "bg-warn-soft text-warn",
+  selected: "bg-brand text-white",
+  rejected: "border border-line text-muted",
+  cancelled: "border border-line text-muted",
+};
+
+function EventCard({ event, children }: { event: HomeRow; children?: React.ReactNode }) {
+  return (
+    <li className="flex flex-col gap-2 rounded-xl border border-line bg-white p-4">
+      <Link href={`/events/${event.id}`} className="flex flex-col gap-1">
+        <span className="text-[13px] font-bold text-brand-strong">{formatEventDate(event.event_date)}</span>
+        <span className="text-[16px] font-bold leading-snug text-ink">{event.title}</span>
+        <span className="text-sm text-body">
+          {event.gather_time && `집합 ${formatTime(event.gather_time)} · `}
+          {formatTime(event.start_time)}–{formatTime(event.end_time)}
+          {event.location_name && ` · ${event.location_name}`}
+        </span>
+      </Link>
+      {children}
+    </li>
+  );
+}
 
 // 첫 화면. 로그인 여부와 회원 상태에 따라 알맞은 곳으로 보낸다.
 export default async function HomePage() {
-  const { userId, profile } = await getCurrentMember();
+  const { supabase, userId, profile } = await getCurrentMember();
 
   if (!userId) {
     return (
@@ -49,15 +149,81 @@ export default async function HomePage() {
   if (profile.status !== "active") redirect("/pending");
   if (isActiveAdmin(profile)) redirect("/admin");
 
+  const { mine, open } = await loadHome(supabase, userId);
+
   return (
-    <PageShell>
-      <Card>
-        <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold">{profile.name}님, 환영합니다</h1>
-          <span className="rounded-md bg-navy px-2 py-0.5 text-xs font-bold text-white">{TIER_LABEL[profile.tier]}</span>
-        </div>
-        <Notice>일정 확인과 신청, 계약서 서명, 정산 내역은 다음 단계에서 열려요.</Notice>
-      </Card>
+    <PageShell actions={<NotificationBell />}>
+      <div className="flex items-center gap-2">
+        <h1 className="text-xl font-bold">{profile.name}님, 안녕하세요</h1>
+        <span className="rounded-md bg-navy px-2 py-0.5 text-xs font-bold text-white">{TIER_LABEL[profile.tier]}</span>
+      </div>
+
+      <section className="flex flex-col gap-3" aria-labelledby="my-events">
+        <h2 id="my-events" className="text-lg font-bold">
+          내 일정
+        </h2>
+        {mine.length === 0 ? (
+          <p className="rounded-xl border border-line bg-white p-5 text-[15px] text-muted">신청한 일정이 없어요.</p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {mine.map((e) => (
+              <EventCard key={e.id} event={e}>
+                <div className="flex flex-wrap items-center gap-2">
+                  {e.status === "cancelled" ? (
+                    <span className="rounded-md bg-warn-soft px-2 py-0.5 text-xs font-bold text-warn">일정 취소</span>
+                  ) : (
+                    e.myStatus && <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${MY_BADGE[e.myStatus]}`}>{MEMBER_APPLICATION_LABEL[e.myStatus]}</span>
+                  )}
+                </div>
+                {e.status !== "cancelled" && e.myStatus === "selected" && e.chatLink && (
+                  <a
+                    href={e.chatLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex h-11 items-center justify-center rounded-lg bg-[#fee500] text-sm font-bold text-[#191919]"
+                  >
+                    확정자 톡방 들어가기
+                  </a>
+                )}
+              </EventCard>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3" aria-labelledby="open-events">
+        <h2 id="open-events" className="text-lg font-bold">
+          신청할 수 있는 일정
+        </h2>
+        {open.length === 0 ? (
+          <p className="rounded-xl border border-line bg-white p-5 text-[15px] text-muted">지금 모집 중인 일정이 없어요. 새 일정이 열리면 알림으로 알려 드려요.</p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {open.map((e) => (
+              <EventCard key={e.id} event={e}>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+                  <span className="font-bold text-brand-strong">{MEMBER_EVENT_STATUS_LABEL[e.status]}</span>
+                  <span className="text-body">{e.event_positions.map((p) => p.role_name).join(" · ")}</span>
+                  <span className="text-muted">{e.remaining > 0 ? `${e.remaining}자리 남음` : "대기 신청 가능"}</span>
+                  {e.apply_deadline && (
+                    <span className={e.deadlinePassed ? "font-bold text-warn" : "text-muted"}>
+                      {e.deadlinePassed ? "신청 마감" : `${formatDateTime(e.apply_deadline)} 마감`}
+                    </span>
+                  )}
+                </div>
+                <Link
+                  href={`/events/${e.id}`}
+                  className="flex h-11 items-center justify-center rounded-lg border border-brand text-sm font-bold text-brand-strong hover:bg-brand-soft"
+                >
+                  자세히 보고 신청하기
+                </Link>
+              </EventCard>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <p className="text-[13px] leading-relaxed text-muted">계약서 서명과 정산 내역은 다음 단계에서 열려요.</p>
       <SignOutButton />
     </PageShell>
   );

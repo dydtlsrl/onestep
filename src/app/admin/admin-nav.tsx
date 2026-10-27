@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const LINKS = [
+  { href: "/admin/events", label: "일정" },
   { href: "/admin/applications", label: "가입 승인" },
   { href: "/admin/members", label: "회원" },
   { href: "/admin/invites", label: "초대 링크" },

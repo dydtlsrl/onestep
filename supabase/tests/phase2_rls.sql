@@ -88,7 +88,7 @@ select tests.expect_count('select * from public.event_positions', 2, '핵심 회
 select tests.expect_count('select * from public.event_extra_rules', 2, '핵심 회원: 교통비·지방비가 보임');
 select tests.expect_error(format('select public.apply_to_event(%L, %L)', :'ev1', '00000000-0000-0000-0000-000000000000'), 'INVALID_INPUT');
 select public.apply_to_event(:'ev1', :'pos_sup');
-select tests.expect_error(format('select public.apply_to_event(%L, %L)', :'ev1', :'pos_sup'), 'ALREADY_APPLIED');
+select tests.expect_error(format('select public.apply_to_event(%L, %L)', :'ev1', :'pos_sup'), 'ALREADY_APPLIED_EVENT');
 select tests.expect_count('select * from public.applications', 1, '핵심 회원: 자기 신청이 보임');
 select tests.expect_count($$select * from public.app_settings where key = 'pay_rules'$$, 1, '활동 회원: 보수 계산 규칙을 볼 수 있음');
 reset role;
@@ -175,6 +175,8 @@ reset role;
 select tests.act_as('00000000-0000-0000-0000-00000000003b');
 set role authenticated;
 select tests.expect_error(format('select public.cancel_application(%L)', :'ev1'), 'ASK_ADMIN');
+select tests.expect_count('select * from public.event_chat_links', 0, '확정자: 결과 알림 전에는 톡방 링크가 안 보임');
+select tests.expect_error('select chat_link from public.events', 'column "chat_link" does not exist');
 reset role;
 
 
@@ -187,6 +189,19 @@ select tests.expect_true(public.notify_selection_results(:'ev1') = 0, '대표: �
 reset role;
 select tests.expect_count($$select 1 from public.notifications where user_id = '00000000-0000-0000-0000-00000000003b' and type = 'application.selected'$$, 1, '확정자: 확정 알림');
 select tests.expect_count($$select 1 from public.notifications where user_id = '00000000-0000-0000-0000-00000000003c' and type = 'application.rejected'$$, 1, '미선발자: 결과 알림');
+
+select tests.act_as('00000000-0000-0000-0000-00000000003b');
+set role authenticated;
+select tests.expect_count($$select 1 from public.event_chat_links where chat_link = 'https://open.kakao.com/o/test'$$, 1, '확정자: 확정 알림 뒤 톡방 링크가 보임');
+reset role;
+select tests.act_as('00000000-0000-0000-0000-00000000003c');
+set role authenticated;
+select tests.expect_count('select * from public.event_chat_links', 0, '미선발자: 톡방 링크가 안 보임');
+reset role;
+select tests.act_as('00000000-0000-0000-0000-00000000003a');
+set role authenticated;
+select tests.expect_count('select * from public.event_chat_links', 1, '대표: 톡방 링크가 보임');
+reset role;
 
 
 -- 8. 직접 추가와 출석 확인 ------------------------------------------------------------------
@@ -213,6 +228,18 @@ select public.set_attendance(:'app_general2', 'late', 0);
 reset role;
 select tests.expect_count($$select type from public.member_notes where member_id = '00000000-0000-0000-0000-00000000003d' and auto_source = 'attendance'$$, 1, '출석: 바꾸면 자동 기록도 하나만 남음');
 select tests.expect_count($$select 1 from public.member_notes where member_id = '00000000-0000-0000-0000-00000000003d' and type = 'late' and auto_source = 'attendance'$$, 1, '출석: 노쇼 → 지각으로 바뀜');
+
+select tests.act_as('00000000-0000-0000-0000-00000000003a');
+set role authenticated;
+select tests.expect_count($$select 1 from public.member_participation where attended_count = 1$$, 2, '대표: 참석·지각한 회원의 참여 횟수');
+reset role;
+select tests.act_as('00000000-0000-0000-0000-00000000003b');
+set role authenticated;
+select tests.expect_count($$select 1 from public.member_participation$$, 1, '회원: 내 참여 횟수만 보임');
+reset role;
+set role anon;
+select tests.expect_error('select * from public.member_participation', 'permission denied%');
+reset role;
 
 
 -- 9. 일정 수정 ----------------------------------------------------------------------------
@@ -289,5 +316,8 @@ select tests.expect_error($$update public.notifications set title = '바꿈'$$, 
 select tests.expect_error($$insert into public.notifications (user_id, type, title) values ('00000000-0000-0000-0000-00000000003b', 'x', 'x')$$, 'permission denied%');
 reset role;
 select tests.expect_count($$select 1 from public.notifications where user_id = '00000000-0000-0000-0000-00000000003b' and read_at is not null$$, 0, '알림: 다른 사람 알림은 읽음 처리되지 않음');
+
+-- 화면이 쓰는 외래 키 이름 (applications → profiles 연결에 이름을 붙여 부른다)
+select tests.expect_count($$select 1 from pg_constraint where conname = 'applications_member_id_fkey'$$, 1, '외래 키 이름: applications_member_id_fkey');
 
 \echo 'ALL PHASE 2 RLS TESTS PASSED'
