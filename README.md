@@ -62,15 +62,18 @@ Supabase > Authentication > **URL Configuration**
 - 배포한 뒤에는 실제 주소(예: `https://onestep.co.kr/**`)도 추가한다.
 
 ### 6. 카카오 로그인 설정
-1. [developers.kakao.com](https://developers.kakao.com)에서 애플리케이션을 추가한다.
+1. [developers.kakao.com](https://developers.kakao.com)에 **대표 본인(사업자 명의) 카카오 계정**으로 로그인해 애플리케이션을 추가한다.
+   비즈 앱 전환은 앱 소유자(Owner)만 할 수 있다.
 2. 앱 키의 **REST API 키**를 복사해 둔다. (Supabase의 Client ID로 쓴다)
 3. 카카오 로그인을 **활성화**하고, Redirect URI에 아래 주소를 등록한다.
    `https://<프로젝트ID>.supabase.co/auth/v1/callback`
    (프로젝트ID는 3단계의 Project URL에 들어 있는 영문자)
 4. 보안 메뉴에서 **Client Secret**을 만들고 사용함으로 바꾼 뒤 복사해 둔다.
-5. **비즈 앱으로 전환**하고(원스텝 사업자 정보로 가능), 동의항목에서 닉네임·프로필 사진·**카카오계정(이메일)** 을 설정한다.
-   Supabase의 카카오 로그인은 이메일 항목을 항상 요청하므로, 이메일 항목이 없으면 `KOE205` 오류가 난다.
-6. Supabase > Authentication > **Sign In / Providers > Kakao**를 켜고 REST API 키와 Client Secret을 넣는다.
+5. 앱 > 일반 > **비즈니스 정보 > 사업자 정보 등록**에서 원스텝 사업자등록번호를 넣어 **비즈 앱으로 전환**한다.
+6. 동의항목에서 닉네임, 프로필 사진, **카카오계정(이메일)** 을 설정한다. 이메일은 선택 동의로 해도 된다.
+   Supabase의 카카오 로그인은 로그인할 때마다 이메일 항목을 함께 요청하므로, 이메일 동의항목이 설정되어 있지 않으면 `KOE205` 오류가 난다.
+7. Supabase > Authentication > **Sign In / Providers > Kakao**를 켜고 REST API 키와 Client Secret을 넣는다.
+   **Allow users without an email**도 켠다. 이메일 제공에 동의하지 않은 사람도 로그인할 수 있게 하기 위해서다.
 
 ### 7. Google 로그인 설정
 1. [console.cloud.google.com](https://console.cloud.google.com)에서 프로젝트를 만들고 **OAuth 동의 화면**을 설정한다. (앱 이름: 원스텝)
@@ -137,7 +140,7 @@ docs/                  기획 문서
 | 증상 | 확인할 것 |
 |---|---|
 | "Supabase 환경변수가 없습니다" | `.env.local`이 있는지, 값을 채웠는지, 서버를 다시 켰는지 |
-| 카카오 로그인 중 `KOE205` | 6단계 5번: 비즈 앱 전환과 이메일 동의항목 |
+| 카카오 로그인 중 `KOE205` | 6단계 5·6번: 비즈 앱 전환과 이메일 동의항목 |
 | 로그인 후 `redirect_uri_mismatch` 또는 다른 주소로 감 | 5단계 Redirect URLs, 6·7단계의 Supabase 콜백 주소 |
 | 카카오톡에서 Google 로그인이 안 됨 | 정상이다. 화면의 "기본 브라우저로 열기"를 누른다 |
 | 대표 화면이 안 열림 | 9단계 SQL에서 role이 `admin`, status가 `active`인지 |

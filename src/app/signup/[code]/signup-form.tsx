@@ -132,7 +132,10 @@ export function SignupForm({ code }: { code: string }) {
         <legend className="px-1 text-sm font-bold">개인정보 수집·이용 동의 (필수)</legend>
         <dl className="grid grid-cols-[72px_1fr] gap-x-2 gap-y-1 text-[13px] leading-relaxed text-body">
           <dt className="font-bold">수집 항목</dt>
-          <dd>이름, 휴대폰 번호, 활동 가능 지역, 경력, 추천인 이름</dd>
+          <dd>
+            이름, 휴대폰 번호, 활동 가능 지역, 경력, 추천인 이름. 로그인한 카카오·Google 계정의 이메일, 이름(닉네임),
+            프로필 사진
+          </dd>
           <dt className="font-bold">이용 목적</dt>
           <dd>회원 확인, 일정 안내와 선발, 연락</dd>
           <dt className="font-bold">보유 기간</dt>
