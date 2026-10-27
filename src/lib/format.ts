@@ -22,3 +22,7 @@ export function formatDate(iso: string): string {
 export function formatDateTime(iso: string): string {
   return dateTimeFormat.format(new Date(iso));
 }
+
+export function formatWon(amount: number): string {
+  return `${amount.toLocaleString("ko-KR")}원`;
+}

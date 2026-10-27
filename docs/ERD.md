@@ -77,7 +77,7 @@ erDiagram
     member_notes {
         uuid id PK
         uuid member_id FK "대상 회원"
-        uuid event_id FK "관련 일정 (선택)"
+        uuid event_id FK "관련 일정 (2단계에서 추가)"
         enum type "memo, no_show, late, caution, praise"
         text content "내용"
         uuid created_by FK "작성자"
@@ -88,7 +88,10 @@ erDiagram
         uuid id PK
         text name "역할 이름"
         text description "설명"
-        int default_rate "인력 1회 보수 (원, 고객사 청구 단가 아님)"
+        enum pay_type "hourly, daily (시급·일급)"
+        int default_rate "시급은 1시간, 일급은 1회 보수 (원, 고객사 청구 단가 아님)"
+        numeric min_paid_hours "시급 최소 보장 시간 (비우면 공통값)"
+        int overtime_rate "일급 초과 1시간당 금액"
         int sort_order "정렬 순서"
         boolean is_active "사용 여부"
         timestamptz created_at
@@ -238,6 +241,7 @@ erDiagram
 | `app_settings` | PRD의 현재 설정(SET-01~11) 값. 지방비 기본표(SET-10), 직인 이미지 위치(SET-11) 포함 | `key` (PK), `value` (jsonb), `version`, `effective_from`, `updated_by`, `updated_at` |
 | `app_settings_history` | 세목·지급일 등 설정의 변경 이력 | `id`, `key`, `value` (jsonb), `version`, `effective_from`, `changed_by`, `change_reason`, `changed_at` |
 | `audit_logs` | 민감정보 열람, 이체 엑셀 다운로드, 등급·제한 변경 기록 | `id`, `actor_id`, `action`, `target_type`, `target_id`, `detail` (jsonb), `created_at` |
+| `member_note_counts` (보기) | 회원별 노쇼·지각 횟수. 호출한 사람의 권한으로 계산 (`security_invoker`) | `member_id`, `no_show_count`, `late_count`, `last_note_at` |
 
 ## 2. 설계 원칙
 
@@ -296,6 +300,7 @@ erDiagram
 | `app_settings` | 전체 | 불가 | 불가 |
 | `app_settings_history` | 읽기 | 불가 | 불가 |
 | `audit_logs` | 읽기 (쓰기는 서버만) | 불가 | 불가 |
+| `member_note_counts` | 읽기 | 불가 (0행) | 불가 |
 
 `member_private`는 행 단위 보안만으로 암호문·마스킹 컬럼의 읽기 권한을 나눌 수 없다. 회원에게 원본 테이블의 직접 조회 권한을 주지 않고, 서버 경로 또는 필요한 마스킹 컬럼만 노출하는 별도 인터페이스로 제공한다. 관리자 키는 서버에서만 사용하고, 서버 경로에서 대표 권한 확인과 열람 기록을 남긴다.
 
@@ -304,3 +309,18 @@ erDiagram
 - `open_core`: 핵심(`core`) 회원만 본다.
 - `open_all`, `closed`, `completed`: 활동 회원 모두 본다. 단, 지난 일정은 자기가 신청한 것만 본다.
 - `draft`: 관리자만 본다.
+
+## 4. DB 함수 (1단계)
+회원 상태·등급을 바꾸는 일은 테이블을 직접 고치지 않고 아래 함수로만 한다. 함수가 대표인지 확인하고 `audit_logs`에 기록을 남긴다. 오류는 영문 코드로 돌려주고, 화면이 `src/lib/errors.ts`에서 한국어로 바꾼다.
+
+| 함수 | 누가 | 하는 일 |
+|---|---|---|
+| `check_invite(code)` | 누구나 | 초대 링크를 쓸 수 있는지만 알려 줌 |
+| `submit_application(...)` | 로그인한 사람 | 초대 링크 확인 → 입력 검사 → 승인 대기 회원 생성 → 링크 사용 횟수 증가 |
+| `approve_member(id, tier)` | 대표 | 승인 + 등급 지정. 관리자 기록에 가입·추천인 자동 기록 |
+| `reject_member(id, reason)` | 대표 | 거절 + 사유 저장 |
+| `set_member_tier(id, tier)` | 대표 | 등급 변경 (활동·제한 회원) |
+| `restrict_member(id, reason)` | 대표 | 활동 제한. 사유 필수, 대표 계정은 불가. 관리자 기록에 "주의"로 자동 기록 |
+| `unrestrict_member(id)` | 대표 | 제한 해제 |
+| `update_pay_rules(...)` | 대표 | 보수 계산 규칙(초과 배율, 계산 단위·단위 미만 처리, 기본 최소 보장 시간) 변경. 값 검사, 버전 증가, `app_settings_history`에 이력 |
+| `is_admin()`, `is_active_member()` | 권한 규칙 안에서 | 지금 사람이 활동 중인 대표/회원인지 |

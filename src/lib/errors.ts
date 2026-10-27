@@ -10,6 +10,12 @@ const MESSAGES: Record<string, string> = {
   PHONE_TAKEN: "이미 가입된 휴대폰 번호예요. 다른 방법(카카오/구글)으로 가입한 적이 있는지 확인해 주세요.",
   NOT_ADMIN: "대표 계정만 할 수 있어요.",
   NOT_PENDING: "이미 처리된 가입 신청이에요. 화면을 새로고침해 주세요.",
+  MEMBER_NOT_FOUND: "활동 중이거나 제한된 회원만 등급을 바꿀 수 있어요.",
+  REASON_REQUIRED: "제한 사유를 적어 주세요. (500자까지)",
+  CANNOT_TARGET_ADMIN: "대표 계정은 제한할 수 없어요.",
+  NOT_ACTIVE: "활동 중인 회원만 제한할 수 있어요. 화면을 새로고침해 주세요.",
+  NOT_RESTRICTED: "제한된 회원이 아니에요. 화면을 새로고침해 주세요.",
+  SETTING_NOT_FOUND: "계산 규칙이 아직 없어요. 세 번째 마이그레이션 파일을 적용했는지 확인해 주세요.",
 };
 
 export function messageForError(error: { message?: string } | null | undefined): string {
