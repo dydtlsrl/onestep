@@ -11,8 +11,6 @@
 --   - 회원은 공개 모집인 날짜를 골라 신청한다. "모든 날짜 참여 필수" 일정은 모든 공개 모집 날짜를 함께 신청해야 한다.
 --   - 신청·선발·출석·초과 시간은 날짜별로 기록한다. 선발 결과 알림은 한 사람에게 한 번만 보낸다.
 --   - 교통비·지방비는 "참여한 날마다" 또는 "일정당 한 번"을 고른다.
---   - 고친 것: 알림 제목·내용이 길이 제한(100자·300자)을 넘어 공개·취소가 실패하던 문제,
---     활동 제한·탈퇴한 회원이 전에 받은 톡방 링크를 계속 볼 수 있던 문제
 
 
 -- 상태값 ---------------------------------------------------------------------
@@ -667,7 +665,7 @@ begin
   insert into public.notifications (user_id, type, title, body, link)
   select member_id,
          case when selected_days is not null then 'application.selected' else 'application.rejected' end,
-         left(case when selected_days is not null then '확정되었어요: ' else '선발 결과: ' end || public.event_label(v_event), 100),
+         case when selected_days is not null then '확정되었어요: ' else '선발 결과: ' end || public.event_label(v_event),
          case when selected_days is not null
               then left('확정: ' || selected_days || '. 집합 안내와 확정자 톡방 링크를 확인해 주세요.', 300)
               else '이번 일정은 함께하지 못하게 되었어요. 다음 일정에서 만나요.' end,
@@ -737,79 +735,6 @@ end;
 $$;
 
 
--- 공개·마감·완료·취소 (대표만) ---------------------------------------------------------
--- 4번 파일과 같고, 알림 제목(100자)·내용(300자)을 길이 제한에 맞게 자른다.
--- 제목이 긴 일정을 공개하거나 긴 사유(최대 500자)로 취소할 때 알림 저장이 실패해 상태 변경까지 취소되던 문제를 막는다.
-
-create or replace function public.set_event_status(p_event_id uuid, p_status public.event_status, p_reason text default '')
-returns void
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_event public.events%rowtype;
-  v_reason text := btrim(coalesce(p_reason, ''));
-begin
-  if not public.is_admin() then
-    raise exception 'NOT_ADMIN';
-  end if;
-
-  select * into v_event from public.events where id = p_event_id for update;
-  if not found then
-    raise exception 'EVENT_NOT_FOUND';
-  end if;
-
-  if not (
-    (v_event.status = 'draft' and p_status in ('open_core', 'open_all', 'cancelled'))
-    or (v_event.status = 'open_core' and p_status in ('open_all', 'closed', 'completed', 'cancelled'))
-    or (v_event.status = 'open_all' and p_status in ('closed', 'completed', 'cancelled'))
-    or (v_event.status = 'closed' and p_status in ('open_all', 'completed', 'cancelled'))
-  ) then
-    raise exception 'INVALID_TRANSITION';
-  end if;
-
-  if p_status = 'cancelled' and (v_reason = '' or char_length(v_reason) > 500) then
-    raise exception 'REASON_REQUIRED';
-  end if;
-
-  update public.events
-  set status = p_status,
-      core_opened_at = case when p_status = 'open_core' then now() else core_opened_at end,
-      general_opened_at = case when p_status = 'open_all' and general_opened_at is null then now() else general_opened_at end,
-      closed_at = case when p_status = 'closed' then now() else closed_at end,
-      completed_at = case when p_status = 'completed' then now() else completed_at end,
-      cancelled_at = case when p_status = 'cancelled' then now() else cancelled_at end,
-      cancel_reason = case when p_status = 'cancelled' then v_reason else cancel_reason end
-  where id = p_event_id;
-
-  -- 공개 알림: 핵심 공개면 핵심 회원에게, 전체 공개면 아직 알림을 받지 않은 회원에게
-  if p_status = 'open_core' then
-    insert into public.notifications (user_id, type, title, body, link)
-    select id, 'event.open', left('핵심 인력 먼저 공개: ' || public.event_label(v_event), 100), '신청을 받고 있어요.', '/events/' || p_event_id
-    from public.profiles
-    where status = 'active' and role = 'member' and tier = 'core';
-  elsif p_status = 'open_all' and v_event.general_opened_at is null then
-    insert into public.notifications (user_id, type, title, body, link)
-    select id, 'event.open', left('새 일정: ' || public.event_label(v_event), 100), '신청을 받고 있어요.', '/events/' || p_event_id
-    from public.profiles
-    where status = 'active' and role = 'member'
-      and (v_event.status = 'draft' or tier = 'general');
-  elsif p_status = 'cancelled' then
-    -- 날짜가 여러 개여도 한 사람에게 한 번만 알린다
-    insert into public.notifications (user_id, type, title, body, link)
-    select distinct a.member_id, 'event.cancelled', left('일정 취소: ' || public.event_label(v_event), 100), left(v_reason, 300), '/events/' || p_event_id
-    from public.applications a
-    where a.event_id = p_event_id and a.status in ('applied', 'waitlisted', 'selected');
-  end if;
-
-  insert into public.audit_logs (actor_id, action, target_type, target_id, detail)
-  values (auth.uid(), 'event.status', 'event', p_event_id,
-          jsonb_build_object('from', v_event.status, 'to', p_status, 'reason', v_reason));
-end;
-$$;
-
-
 -- 권한 -----------------------------------------------------------------------
 
 revoke all on public.event_days from anon, authenticated;
@@ -826,24 +751,6 @@ grant execute on function public.update_event(uuid, jsonb, jsonb, jsonb, text, t
 grant execute on function public.apply_to_event(uuid, uuid[]) to authenticated;
 
 alter table public.event_days enable row level security;
-
--- 톡방 링크: 활동 회원이어야 한다 (확정 알림을 받은 뒤 제한·탈퇴되면 더 이상 못 본다)
-drop policy "대표와 확정자만 톡방 링크를 본다" on public.event_chat_links;
-create policy "대표와 활동 중인 확정자만 톡방 링크를 본다"
-  on public.event_chat_links for select to authenticated
-  using (
-    (select public.is_admin())
-    or (
-      (select public.is_active_member())
-      and exists (
-        select 1 from public.applications a
-        where a.event_id = event_chat_links.event_id
-          and a.member_id = (select auth.uid())
-          and a.status = 'selected'
-          and a.notified_status = 'selected'
-      )
-    )
-  );
 
 create policy "볼 수 있는 일정의 날짜만 본다"
   on public.event_days for select to authenticated
