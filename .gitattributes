@@ -1,0 +1,4 @@
+# Windows에서 받아도 줄바꿈이 섞이지 않게 한다
+* text=auto eol=lf
+*.ico binary
+*.png binary
