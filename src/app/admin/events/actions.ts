@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { messageForError } from "@/lib/errors";
-import { readEventForm, toEventRpcArgs } from "@/lib/event-form";
+import { firstIssueMessage, readEventForm, toEventRpcArgs } from "@/lib/event-form";
 import { createClient } from "@/lib/supabase/server";
 
 export interface EventActionState {
@@ -21,13 +21,13 @@ function refresh(eventId?: string) {
 
 export async function createEvent(_prev: EventActionState, formData: FormData): Promise<EventActionState> {
   const parsed = readEventForm(formData);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력한 내용을 확인해 주세요." };
+  if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
   const args = toEventRpcArgs(parsed.data);
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("create_event", {
     p_event: args.event,
-    p_positions: args.positions,
+    p_days: args.days,
     p_extras: args.extras,
     p_client_name: args.clientName,
     p_internal_memo: args.memo,
@@ -42,14 +42,14 @@ export async function updateEvent(_prev: EventActionState, formData: FormData): 
   const id = z.uuid().safeParse(formData.get("eventId"));
   if (!id.success) return { error: "잘못된 요청이에요." };
   const parsed = readEventForm(formData);
-  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력한 내용을 확인해 주세요." };
+  if (!parsed.success) return { error: firstIssueMessage(parsed.error) };
   const args = toEventRpcArgs(parsed.data);
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("update_event", {
     p_event_id: id.data,
     p_event: args.event,
-    p_positions: args.positions,
+    p_days: args.days,
     p_extras: args.extras,
     p_client_name: args.clientName,
     p_internal_memo: args.memo,

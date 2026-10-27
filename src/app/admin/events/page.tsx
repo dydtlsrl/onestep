@@ -2,11 +2,13 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
 import { STATUS_BADGE } from "./badges";
 import {
+  DAY_KIND_LABEL,
   EVENT_STATUS_LABEL,
   EVENT_TYPE_LABEL,
-  formatEventDate,
+  formatEventRange,
   formatTime,
   todayKst,
+  type DayKind,
   type ApplicationStatus,
   type EventStatus,
   type EventType,
@@ -16,10 +18,10 @@ interface ListRow {
   id: string;
   type: EventType;
   title: string;
-  event_date: string;
-  start_time: string;
-  end_time: string;
+  start_date: string;
+  end_date: string;
   status: EventStatus;
+  event_days: { day_date: string; kind: DayKind; start_time: string; end_time: string }[];
   event_positions: { headcount: number }[];
   applications: { status: ApplicationStatus }[];
 }
@@ -30,11 +32,12 @@ async function loadEvents(supabase: Supabase, past: boolean) {
   const today = todayKst(Date.now());
   let query = supabase
     .from("events")
-    .select("id, type, title, event_date, start_time, end_time, status, event_positions(headcount), applications(status)")
+    .select("id, type, title, start_date, end_date, status, event_days(day_date, kind, start_time, end_time), event_positions(headcount), applications(status)")
     .limit(200);
+  // 여러 날짜 일정은 마지막 날이 지나야 지난 일정이 된다
   query = past
-    ? query.lt("event_date", today).order("event_date", { ascending: false })
-    : query.gte("event_date", today).order("event_date", { ascending: true });
+    ? query.lt("end_date", today).order("start_date", { ascending: false })
+    : query.gte("end_date", today).order("start_date", { ascending: true });
   return query.returns<ListRow[]>();
 }
 
@@ -83,7 +86,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
                 <th scope="col" className="px-4 py-3 font-bold">날짜</th>
                 <th scope="col" className="px-3 py-3 font-bold">일정</th>
                 <th scope="col" className="px-3 py-3 font-bold">상태</th>
-                <th scope="col" className="px-3 py-3 text-right font-bold">확정 / 모집</th>
+                <th scope="col" className="px-3 py-3 text-right font-bold">확정 / 모집 (날짜 합계)</th>
                 <th scope="col" className="px-4 py-3 text-right font-bold">처리 전 신청</th>
               </tr>
             </thead>
@@ -92,12 +95,15 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
                 const headcount = e.event_positions.reduce((sum, p) => sum + p.headcount, 0);
                 const selected = e.applications.filter((a) => a.status === "selected").length;
                 const waiting = e.applications.filter((a) => a.status === "applied").length;
+                const days = [...e.event_days].sort((a, b) => a.day_date.localeCompare(b.day_date));
                 return (
                   <tr key={e.id} className="border-b border-[#eef0f3] last:border-0">
                     <td className="whitespace-nowrap px-4 py-3">
-                      <div className="font-bold">{formatEventDate(e.event_date)}</div>
+                      <div className="font-bold">{formatEventRange(e.start_date, e.end_date)}</div>
                       <div className="text-[13px] text-muted">
-                        {formatTime(e.start_time)}–{formatTime(e.end_time)}
+                        {days.length === 1
+                          ? `${formatTime(days[0].start_time)}–${formatTime(days[0].end_time)}`
+                          : `${days.length}일 · ${days.map((d) => DAY_KIND_LABEL[d.kind]).join("·")}`}
                       </div>
                     </td>
                     <td className="px-3 py-3">

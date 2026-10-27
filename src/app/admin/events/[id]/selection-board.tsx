@@ -1,18 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useState } from "react";
 import { SubmitButton } from "@/components/submit-button";
+import { APPLICATION_STATUS_LABEL, type ApplicationStatus, type DayRecruit } from "@/lib/events";
 import { TIER_LABEL, type MemberTier } from "@/lib/tier";
-import { APPLICATION_STATUS_LABEL, type ApplicationStatus } from "@/lib/events";
 import { addMemberToEvent, decideApplications, notifyResults, type EventActionState } from "../actions";
 import { APPLICATION_BADGE } from "../badges";
+
+export interface DayOption {
+  id: string;
+  label: string; // 11/7(토) 세팅
+  recruit: DayRecruit;
+}
 
 export interface ApplicantRow {
   id: string;
   memberId: string;
   name: string;
   tier: MemberTier;
+  dayId: string;
+  dayLabel: string;
   positionId: string;
   positionName: string;
   status: ApplicationStatus;
@@ -26,6 +34,7 @@ export interface ApplicantRow {
 
 export interface PositionStat {
   id: string;
+  dayId: string;
   name: string;
   headcount: number;
   selected: number;
@@ -36,6 +45,7 @@ export interface PositionStat {
 export interface MemberOption {
   id: string;
   label: string;
+  selectedHere: boolean; // 이 일정의 다른 날짜에 확정된 회원
 }
 
 const FILTERS: ("all" | ApplicationStatus)[] = ["all", "applied", "selected", "waitlisted", "rejected", "cancelled"];
@@ -61,9 +71,23 @@ function Message({ state }: { state: EventActionState }) {
   return null;
 }
 
-// 신청자 선발: 역할별 충원 현황, 신청자 표, 여러 명 한 번에 처리, 직접 추가, 결과 알림
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={`h-9 rounded-full border px-3 text-sm ${active ? "border-ink bg-ink text-white" : "border-line bg-white text-body"}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// 신청자 선발: 날짜·역할별 충원 현황, 신청자 표(날짜별 한 줄), 여러 명 한 번에 처리, 직접 추가, 결과 알림
 export function SelectionBoard({
   eventId,
+  days,
   positions,
   applicants,
   members,
@@ -72,6 +96,7 @@ export function SelectionBoard({
   pendingNotify,
 }: {
   eventId: string;
+  days: DayOption[];
   positions: PositionStat[];
   applicants: ApplicantRow[];
   members: MemberOption[];
@@ -83,14 +108,16 @@ export function SelectionBoard({
   const [addState, addAction] = useActionState<EventActionState, FormData>(addMemberToEvent, {});
   const [notifyState, notifyAction] = useActionState<EventActionState, FormData>(notifyResults, {});
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
+  const [dayFilter, setDayFilter] = useState<string>("all");
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [memberQuery, setMemberQuery] = useState("");
+  const multiDay = days.length > 1;
 
-  const visible = filter === "all" ? applicants : applicants.filter((a) => a.status === filter);
+  const inDay = dayFilter === "all" ? applicants : applicants.filter((a) => a.dayId === dayFilter);
+  const visible = filter === "all" ? inDay : inDay.filter((a) => a.status === filter);
   const selectable = visible.filter((a) => a.status !== "cancelled");
   const allChecked = selectable.length > 0 && selectable.every((a) => checked.has(a.id));
-  const appliedIds = useMemo(() => new Set(applicants.filter((a) => a.status !== "cancelled").map((a) => a.memberId)), [applicants]);
-  const memberChoices = members.filter((m) => !appliedIds.has(m.id) && m.label.includes(memberQuery.trim()));
+  const memberChoices = members.filter((m) => m.label.includes(memberQuery.trim()));
 
   function toggle(id: string) {
     setChecked((prev) => {
@@ -103,48 +130,61 @@ export function SelectionBoard({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-3">
-        {positions.map((p) => {
-          const over = p.selected > p.headcount;
-          const pct = Math.min(100, Math.round((p.selected / p.headcount) * 100));
-          return (
-            <div key={p.id} className="flex flex-[1_1_220px] flex-col gap-2 rounded-xl border border-line bg-white p-4">
-              <span className="text-sm font-bold">{p.name}</span>
-              <span className="text-2xl font-bold tracking-tight">
-                {p.selected} <span className="text-[15px] font-normal text-muted">/ {p.headcount}명 확정</span>
-              </span>
-              <div className="h-2 overflow-hidden rounded bg-[#eef0f3]">
-                <div className={`h-2 rounded ${over ? "bg-warn" : "bg-brand"}`} style={{ width: `${pct}%` }} />
-              </div>
-              <span className={`text-[13px] ${over ? "font-bold text-warn" : "text-muted"}`}>
-                {over ? `모집 인원보다 ${p.selected - p.headcount}명 많아요` : `${p.headcount - p.selected}자리 남음`} · 대기 {p.waitlisted} · 미처리 {p.applied}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      {days.map((day) => (
+        <section key={day.id} aria-label={`${day.label} 충원 현황`} className="flex flex-col gap-2">
+          {multiDay && (
+            <h3 className="text-sm font-bold text-body">
+              {day.label} <span className="font-normal text-muted">· {day.recruit === "assign" ? "대표 지정 (회원 신청 없음)" : "공개 모집"}</span>
+            </h3>
+          )}
+          <div className="flex flex-wrap gap-3">
+            {positions
+              .filter((p) => p.dayId === day.id)
+              .map((p) => {
+                const over = p.selected > p.headcount;
+                const pct = Math.min(100, Math.round((p.selected / p.headcount) * 100));
+                return (
+                  <div key={p.id} className="flex flex-[1_1_220px] flex-col gap-2 rounded-xl border border-line bg-white p-4">
+                    <span className="text-sm font-bold">{p.name}</span>
+                    <span className="text-2xl font-bold tracking-tight">
+                      {p.selected} <span className="text-[15px] font-normal text-muted">/ {p.headcount}명 확정</span>
+                    </span>
+                    <div className="h-2 overflow-hidden rounded bg-[#eef0f3]">
+                      <div className={`h-2 rounded ${over ? "bg-warn" : "bg-brand"}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className={`text-[13px] ${over ? "font-bold text-warn" : "text-muted"}`}>
+                      {over ? `모집 인원보다 ${p.selected - p.headcount}명 많아요` : `${p.headcount - p.selected}자리 남음`} · 대기 {p.waitlisted} · 미처리 {p.applied}
+                    </span>
+                  </div>
+                );
+              })}
+          </div>
+        </section>
+      ))}
 
+      {multiDay && (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="날짜로 거르기">
+          <Chip active={dayFilter === "all"} onClick={() => setDayFilter("all")}>
+            모든 날짜
+          </Chip>
+          {days.map((d) => (
+            <Chip key={d.id} active={dayFilter === d.id} onClick={() => setDayFilter(d.id)}>
+              {d.label} {applicants.filter((a) => a.dayId === d.id && a.status !== "cancelled").length}
+            </Chip>
+          ))}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="상태로 거르기">
-        {FILTERS.map((f) => {
-          const count = f === "all" ? applicants.length : applicants.filter((a) => a.status === f).length;
-          const active = filter === f;
-          return (
-            <button
-              key={f}
-              type="button"
-              aria-pressed={active}
-              onClick={() => setFilter(f)}
-              className={`h-9 rounded-full border px-3 text-sm ${active ? "border-ink bg-ink text-white" : "border-line bg-white text-body"}`}
-            >
-              {f === "all" ? "전체" : APPLICATION_STATUS_LABEL[f]} {count}
-            </button>
-          );
-        })}
+        {FILTERS.map((f) => (
+          <Chip key={f} active={filter === f} onClick={() => setFilter(f)}>
+            {f === "all" ? "전체" : APPLICATION_STATUS_LABEL[f]} {f === "all" ? inDay.length : inDay.filter((a) => a.status === f).length}
+          </Chip>
+        ))}
       </div>
 
       {editable && checked.size > 0 && (
         <div role="status" className="flex flex-wrap items-center gap-2 rounded-lg bg-brand-soft px-3 py-2">
-          <span className="mr-2 text-sm font-bold text-brand-strong">{checked.size}명 선택됨</span>
+          <span className="mr-2 text-sm font-bold text-brand-strong">{checked.size}건 선택됨</span>
           {DECISIONS.map((d) => (
             <form key={d.status} action={decideAction} onSubmit={() => setChecked(new Set())}>
               <input type="hidden" name="eventId" value={eventId} />
@@ -163,14 +203,14 @@ export function SelectionBoard({
       <Message state={decideState} />
 
       <div className="overflow-x-auto rounded-xl border border-line bg-white">
-        <table className="w-full min-w-[960px] border-collapse text-sm">
+        <table className="w-full min-w-[1040px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-[#f8f9fa] text-left text-[13px] text-body">
               <th scope="col" className="w-10 py-3 pl-4">
                 {editable && (
                   <input
                     type="checkbox"
-                    aria-label="보이는 신청자 모두 선택"
+                    aria-label="보이는 신청 모두 선택"
                     checked={allChecked}
                     onChange={() => setChecked(allChecked ? new Set() : new Set(selectable.map((a) => a.id)))}
                     className="h-4 w-4 accent-brand"
@@ -178,7 +218,7 @@ export function SelectionBoard({
                 )}
               </th>
               <th scope="col" className="px-3 py-3 font-bold">이름</th>
-              <th scope="col" className="px-3 py-3 font-bold">역할</th>
+              <th scope="col" className="px-3 py-3 font-bold">{multiDay ? "날짜 · 역할" : "역할"}</th>
               <th scope="col" className="px-3 py-3 text-right font-bold">참여</th>
               <th scope="col" className="px-3 py-3 font-bold">노쇼·지각</th>
               <th scope="col" className="px-3 py-3 font-bold">최근 기록 (대표만 보임)</th>
@@ -192,7 +232,13 @@ export function SelectionBoard({
               <tr key={a.id} className={`border-b border-[#eef0f3] last:border-0 ${checked.has(a.id) ? "bg-[#f3f6fe]" : ""}`}>
                 <td className="py-3 pl-4">
                   {editable && a.status !== "cancelled" && (
-                    <input type="checkbox" aria-label={`${a.name} 선택`} checked={checked.has(a.id)} onChange={() => toggle(a.id)} className="h-4 w-4 accent-brand" />
+                    <input
+                      type="checkbox"
+                      aria-label={`${a.name} ${multiDay ? a.dayLabel : ""} 선택`}
+                      checked={checked.has(a.id)}
+                      onChange={() => toggle(a.id)}
+                      className="h-4 w-4 accent-brand"
+                    />
                   )}
                 </td>
                 <td className="px-3 py-3">
@@ -209,7 +255,10 @@ export function SelectionBoard({
                     {a.addedByAdmin && <span className="text-[11px] text-muted">직접 추가</span>}
                   </div>
                 </td>
-                <td className="whitespace-nowrap px-3 py-3">{a.positionName}</td>
+                <td className="whitespace-nowrap px-3 py-3">
+                  {multiDay && <span className="mr-1.5 font-bold">{a.dayLabel}</span>}
+                  {a.positionName}
+                </td>
                 <td className="px-3 py-3 text-right">{a.participation}회</td>
                 <td className="whitespace-nowrap px-3 py-3">
                   {a.noShow + a.late > 0 ? (
@@ -220,7 +269,7 @@ export function SelectionBoard({
                     <span className="text-muted">없음</span>
                   )}
                 </td>
-                <td className="max-w-[220px] truncate px-3 py-3 text-muted" title={a.lastNote}>
+                <td className="max-w-[200px] truncate px-3 py-3 text-muted" title={a.lastNote}>
                   {a.lastNote || "—"}
                 </td>
                 <td className="whitespace-nowrap px-3 py-3 text-muted">{a.appliedAt}</td>
@@ -256,7 +305,7 @@ export function SelectionBoard({
             {visible.length === 0 && (
               <tr>
                 <td colSpan={9} className="py-8 text-center text-muted">
-                  {applicants.length === 0 ? "아직 신청자가 없어요." : "이 상태의 신청자가 없어요."}
+                  {applicants.length === 0 ? "아직 신청자가 없어요." : "이 조건의 신청이 없어요."}
                 </td>
               </tr>
             )}
@@ -267,56 +316,64 @@ export function SelectionBoard({
       {editable && (
         <div className="grid gap-4 lg:grid-cols-2">
           {canAdd && (
-          <form action={addAction} className="flex flex-col gap-3 rounded-xl border border-line bg-white p-4">
-            <h3 className="font-bold">회원 직접 추가</h3>
-            <p className="text-[13px] text-muted">전화로 섭외한 사람처럼 신청하지 않은 회원을 확정자로 넣어요.</p>
-            <input type="hidden" name="eventId" value={eventId} />
-            <div className="flex flex-wrap gap-2">
-              <label htmlFor="member-search" className="sr-only">
-                회원 찾기
-              </label>
-              <input
-                id="member-search"
-                value={memberQuery}
-                onChange={(e) => setMemberQuery(e.target.value)}
-                placeholder="이름으로 찾기"
-                className="h-11 flex-[1_1_140px] rounded-lg border border-field bg-white px-3 text-sm"
-              />
-              <label htmlFor="member-pick" className="sr-only">
-                회원
-              </label>
-              <select id="member-pick" name="memberId" required className="h-11 flex-[2_1_200px] rounded-lg border border-field bg-white px-3 text-sm">
-                <option value="">회원 고르기 ({memberChoices.length}명)</option>
-                {memberChoices.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-              <label htmlFor="position-pick" className="sr-only">
-                역할
-              </label>
-              <select id="position-pick" name="positionId" required className="h-11 flex-[1_1_120px] rounded-lg border border-field bg-white px-3 text-sm">
-                {positions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <SubmitButton variant="secondary" pendingText="추가 중…">
-                확정자로 추가
-              </SubmitButton>
-              <Message state={addState} />
-            </div>
-          </form>
+            <form action={addAction} className="flex flex-col gap-3 rounded-xl border border-line bg-white p-4">
+              <h3 className="font-bold">회원 직접 넣기</h3>
+              <p className="text-[13px] text-muted">
+                대표 지정 날짜(세팅일 등)의 인원이나, 전화로 섭외한 사람을 확정자로 넣어요. 이 일정의 다른 날짜에 확정된 회원이 위에 나와요.
+              </p>
+              <input type="hidden" name="eventId" value={eventId} />
+              <div className="flex flex-wrap gap-2">
+                <label htmlFor="member-search" className="sr-only">
+                  회원 찾기
+                </label>
+                <input
+                  id="member-search"
+                  value={memberQuery}
+                  onChange={(e) => setMemberQuery(e.target.value)}
+                  placeholder="이름으로 찾기"
+                  className="h-11 flex-[1_1_140px] rounded-lg border border-field bg-white px-3 text-sm"
+                />
+                <label htmlFor="member-pick" className="sr-only">
+                  회원
+                </label>
+                <select id="member-pick" name="memberId" required className="h-11 flex-[2_1_200px] rounded-lg border border-field bg-white px-3 text-sm">
+                  <option value="">회원 고르기 ({memberChoices.length}명)</option>
+                  {memberChoices.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.selectedHere ? `★ ${m.label} (이 일정 확정)` : m.label}
+                    </option>
+                  ))}
+                </select>
+                <label htmlFor="position-pick" className="sr-only">
+                  날짜와 역할
+                </label>
+                <select id="position-pick" name="positionId" required className="h-11 flex-[2_1_200px] rounded-lg border border-field bg-white px-3 text-sm">
+                  {days.map((d) => (
+                    <optgroup key={d.id} label={`${d.label}${d.recruit === "assign" ? " · 대표 지정" : ""}`}>
+                      {positions
+                        .filter((p) => p.dayId === d.id)
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {multiDay ? `${d.label} · ${p.name}` : p.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <SubmitButton variant="secondary" pendingText="넣는 중…">
+                  확정자로 넣기
+                </SubmitButton>
+                <Message state={addState} />
+              </div>
+            </form>
           )}
 
           <form action={notifyAction} className="flex flex-col gap-3 rounded-xl border border-line bg-white p-4">
             <h3 className="font-bold">선발 결과 알림</h3>
             <p className="text-[13px] leading-relaxed text-muted">
-              확정·미선발이 바뀐 사람에게만 알림을 보내요. 대기자에게는 보내지 않아요. 확정자는 알림을 받으면 톡방 링크를 볼 수 있어요.
+              확정·미선발이 바뀐 사람에게만 한 번씩 보내요. 날짜가 여러 개면 확정된 날짜를 모아 한 알림에 적어요. 대기자에게는 보내지 않아요. 확정자는 알림을 받으면 톡방 링크를 볼 수 있어요.
             </p>
             <input type="hidden" name="eventId" value={eventId} />
             <div className="flex flex-wrap items-center gap-3">

@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 문서 버전 | v0.1 (초안) |
-| 최종 수정 | 2026-10-27 (2단계 일정·신청 반영) |
+| 최종 수정 | 2026-10-27 (2단계 일정·신청, 여러 날짜 일정 반영) |
 | 데이터베이스 | PostgreSQL (Supabase) |
 | 관련 문서 | [PRD](./PRD.md) · [기술 스택](./TECH_STACK.md) |
 
@@ -17,10 +17,12 @@ erDiagram
     events ||--o{ member_notes : "관련 일정"
     events ||--|| event_internal : "내부 정보 (고객사·메모)"
     events ||--o| event_chat_links : "확정자 톡방"
-    events ||--|{ event_positions : "모집 역할"
+    events ||--|{ event_days : "날짜 (세팅일·진행일)"
+    event_days ||--|{ event_positions : "날짜별 모집 역할"
     events ||--o{ event_extra_rules : "추가 지급 기본값"
     job_roles ||--o{ event_positions : "단가표 참조"
     events ||--o{ applications : "신청 받음"
+    event_days ||--o{ applications : "날짜별 신청"
     event_positions ||--o{ applications : "역할 선택"
     profiles ||--o{ applications : "신청함"
     applications ||--o| contracts : "계약"
@@ -82,6 +84,7 @@ erDiagram
         enum type "memo, no_show, late, caution, praise"
         text content "내용"
         text auto_source "자동 기록 출처 (attendance = 출석 확인)"
+        uuid application_id FK "자동 기록을 만든 날짜별 신청"
         uuid created_by FK "작성자"
         timestamptz created_at
     }
@@ -114,10 +117,9 @@ erDiagram
         uuid id PK
         enum type "written_exam, interview, event, other"
         text title "회원에게 보이는 제목"
-        date event_date "행사일"
-        time gather_time "집합 시간"
-        time start_time "근무 시작"
-        time end_time "근무 종료"
+        date start_date "첫날 (날짜 목록에서 계산)"
+        date end_date "마지막 날"
+        boolean all_days_required "모든 날짜 참여 필수"
         text location_name "장소 이름"
         text address "주소"
         text notice "안내사항"
@@ -135,9 +137,22 @@ erDiagram
         timestamptz updated_at
     }
 
+    event_days {
+        uuid id PK
+        uuid event_id FK
+        date day_date "날짜"
+        enum kind "setup, main, other (세팅·진행·기타)"
+        enum recruit "open, assign (공개 모집·대표 지정)"
+        time gather_time "집합 시간"
+        time start_time "근무 시작"
+        time end_time "근무 종료"
+        int sort_order "표시 순서"
+    }
+
     event_positions {
         uuid id PK
         uuid event_id FK
+        uuid day_id FK "날짜"
         uuid role_id FK "단가표 역할"
         text role_name "등록 당시 역할 이름"
         enum pay_type "hourly, daily"
@@ -151,6 +166,7 @@ erDiagram
     applications {
         uuid id PK
         uuid event_id FK
+        uuid day_id FK "날짜 (날짜마다 한 줄)"
         uuid position_id FK "신청 역할"
         uuid member_id FK
         enum status "applied, waitlisted, selected, rejected, cancelled"
@@ -221,6 +237,7 @@ erDiagram
         enum type "transport, regional"
         enum tier "all, core, general"
         int amount "1인당 금액 (원)"
+        boolean per_day "참여한 날마다(true) / 일정당 한 번(false)"
     }
 
     payment_extras {
@@ -254,7 +271,7 @@ erDiagram
 | `app_settings_history` | 세목·지급일 등 설정의 변경 이력 | `id`, `key`, `value` (jsonb), `version`, `effective_from`, `changed_by`, `change_reason`, `changed_at` |
 | `audit_logs` | 민감정보 열람, 이체 엑셀 다운로드, 등급·제한 변경 기록 | `id`, `actor_id`, `action`, `target_type`, `target_id`, `detail` (jsonb), `created_at` |
 | `member_note_counts` (보기) | 회원별 노쇼·지각 횟수. 호출한 사람의 권한으로 계산 (`security_invoker`) | `member_id`, `no_show_count`, `late_count`, `last_note_at` |
-| `member_participation` (보기) | 회원별 참여 횟수 (확정되고 참석·지각으로 확인된 일정 수). `security_invoker` | `member_id`, `attended_count` |
+| `member_participation` (보기) | 회원별 참여 횟수 (참석·지각한 날이 하루라도 있는 일정 수). `security_invoker` | `member_id`, `attended_count` |
 | `clients` (나중에) | 고객사 목록. MVP에서는 일정마다 `event_internal.client_name`에 이름만 적는다. 반복 고객이 많아지면 만든다 | `id`, `name`, `contact_name`, `contact_phone`, `memo` |
 
 ## 2. 설계 원칙
@@ -270,7 +287,7 @@ erDiagram
 
 | 테이블 | 저장하는 값 | 이유 |
 |---|---|---|
-| `event_positions` | `role_name`, `rate` | 단가표를 바꿔도 지난 일정 단가는 그대로 |
+| `event_positions` | `role_name`, `rate` (날짜별) | 단가표를 바꿔도 지난 일정 단가는 그대로 |
 | `event_extra_rules` | `amount` | 지방비 기본표를 바꿔도 이미 등록한 일정의 금액은 그대로 |
 | `payment_extras` | `amount`, `source` | 일정의 기본값을 나중에 바꿔도 이미 만든 지급 항목은 그대로. 자동으로 붙은 것인지 대표가 넣은 것인지 구분 |
 | `contracts` | `body_snapshot`, `document_hash` | 양식을 고쳐도 서명한 계약서 내용은 그대로, 위·변조 확인 가능 |
@@ -288,7 +305,8 @@ erDiagram
 
 ### 2.4 제약 조건
 - `profiles.phone` 중복 불가: 한 사람이 카카오·구글로 두 번 가입하는 것을 막는다.
-- `applications (event_id, member_id)` 중복 불가: 한 일정에 한 번만 신청
+- `applications (day_id, member_id)` 중복 불가: 한 날짜에 한 번만 신청 (여러 날짜면 날짜마다 한 줄)
+- 신청의 역할은 같은 날짜의 것, 날짜는 같은 일정의 것만 고를 수 있다 (복합 외래 키)
 - `contracts.application_id`, `payments.application_id` 중복 불가: 확정 1건당 계약 1건, 지급 1건
 - 금액은 모두 원 단위 정수(`int`)로 저장한다. 소수 계산 오차를 피하기 위해서다.
 
@@ -304,6 +322,7 @@ erDiagram
 | `events` | 전체 | 볼 수 있는 일정만 읽기 (아래 공개 규칙). 고객사는 이 테이블에 없음 | 같음 |
 | `event_internal` | 전체 | **불가** | 불가 |
 | `event_chat_links` | 전체 | 확정되고 **결과 알림을 받은** 일정의 것만 읽기 | 불가 |
+| `event_days` | 전체 | 볼 수 있는 일정의 것만 읽기 | 같음 |
 | `event_positions` | 전체 | 볼 수 있는 일정의 것만 읽기 | 같음 |
 | `event_extra_rules` | 전체 | 볼 수 있는 일정의 것만 읽기 (화면에는 자기 등급 금액만) | 같음 |
 | `applications` | 전체 | 자기 신청 읽기. 신청·취소는 함수로만 | 불가 (역할별 확정 인원만 `position_selected_counts`로 공개) |
@@ -347,16 +366,18 @@ erDiagram
 ## 5. DB 함수 (2단계: 일정·신청)
 일정과 신청도 테이블을 직접 고치지 않고 아래 함수로만 바꾼다. 알림(`notifications`)도 함수 안에서 같이 만든다.
 
+여러 날짜 일정(`20261031000000_event_days.sql`)부터 아래 형식을 쓴다.
+
 | 함수 | 누가 | 하는 일 |
 |---|---|---|
-| `create_event(event, positions, extras, client_name, memo)` | 대표 | 임시저장 일정 생성. 모집 역할은 단가표 값을 복사해 저장 |
-| `update_event(id, ...)` | 대표 | 일정 수정. 신청자가 있는 역할은 지울 수 없음(`POSITION_IN_USE`), 완료·취소 일정은 수정 불가(`EVENT_LOCKED`) |
+| `create_event(event, days, extras, client_name, memo)` | 대표 | 임시저장 일정 생성. `days`에 날짜별 시간·종류·모집 방식과 역할을 넣는다. 역할은 단가표 값을 복사해 저장. 첫날·마지막 날은 날짜 목록에서 계산 |
+| `update_event(id, event, days, extras, ...)` | 대표 | 일정 수정. 신청자가 있는 날짜·역할은 뺄 수 없음(`POSITION_IN_USE`), 역할을 다른 날짜로 옮길 수 없음, 완료·취소 일정은 수정 불가(`EVENT_LOCKED`) |
 | `set_event_status(id, status, reason)` | 대표 | 공개·마감·완료·취소. 처음 공개할 때 볼 수 있는 회원에게 알림, 취소는 사유 필수이며 신청자에게 알림 |
-| `apply_to_event(event_id, position_id)` | 활동 회원 | 신청. 공개 범위·마감 시각 확인, 한 일정에 한 번(`ALREADY_APPLIED_EVENT`). 취소했던 신청은 다시 낼 수 있음 |
-| `cancel_application(event_id, reason)` | 활동 회원 | 확정 전 신청 취소. 확정 뒤에는 `ASK_ADMIN` (PRD SET-06 ①) |
-| `decide_applications(ids, status)` | 대표 | 여러 신청을 한 번에 확정·대기·미선발·처리 전으로. 확정이 풀리면 출석·초과 시간과 자동 기록을 지움 |
-| `add_member_to_event(event_id, position_id, member_id)` | 대표 | 신청하지 않은 회원을 확정자로 직접 추가 |
-| `notify_selection_results(event_id)` | 대표 | 확정·미선발이 바뀐 사람에게만 결과 알림. 다시 눌러도 같은 알림은 안 보냄 |
-| `set_attendance(application_id, attendance, overtime_minutes)` | 대표 | 출석·초과 시간 저장. 노쇼·지각은 관리자 기록에 자동으로 남기고, 바꾸면 자동 기록도 바뀜 |
+| `apply_to_event(event_id, position_ids[])` | 활동 회원 | 공개 모집 날짜마다 역할 하나씩 골라 신청. 공개 범위·마감 시각 확인, 한 일정에 한 번(`ALREADY_APPLIED_EVENT`), "모든 날짜 참여 필수"면 모두 골라야 함(`ALL_DAYS_REQUIRED`). 취소했던 신청은 다시 낼 수 있음 |
+| `cancel_application(event_id, reason)` | 활동 회원 | 이 일정의 확정 전 신청(모든 날짜) 취소. 확정된 날짜가 있으면 `ASK_ADMIN` (PRD SET-06 ①) |
+| `decide_applications(ids, status)` | 대표 | 여러 신청(날짜별)을 한 번에 확정·대기·미선발·처리 전으로. 확정이 풀리면 그 날의 출석·초과 시간과 자동 기록을 지움 |
+| `add_member_to_event(event_id, position_id, member_id)` | 대표 | 신청하지 않은 회원을 그 역할의 날짜에 확정자로 직접 추가 (대표 지정 날짜 포함) |
+| `notify_selection_results(event_id)` | 대표 | 확정·미선발이 바뀐 사람에게만 한 번씩 결과 알림. 확정된 날짜·역할을 모아 적음. 다시 눌러도 같은 알림은 안 보냄 |
+| `set_attendance(application_id, attendance, overtime_minutes)` | 대표 | 날짜별 출석·초과 시간 저장. 노쇼·지각은 관리자 기록에 자동으로 남기고(날짜 이름 포함), 바꾸면 자동 기록도 바뀜 |
 | `position_selected_counts(event_ids)` | 활동 회원 | 볼 수 있는 일정의 역할별 확정 인원 (남은 자리 표시) |
 | `can_view_event(id, status)` | 권한 규칙 안에서 | 위의 일정 공개 규칙 |

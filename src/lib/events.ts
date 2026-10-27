@@ -8,15 +8,16 @@ export type ApplicationStatus = "applied" | "waitlisted" | "selected" | "rejecte
 export type Attendance = "unknown" | "attended" | "late" | "no_show";
 export type ExtraPayType = "transport" | "regional";
 export type ExtraTier = "all" | "core" | "general";
+export type DayKind = "setup" | "main" | "other";
+export type DayRecruit = "open" | "assign";
 
 export interface EventRow {
   id: string;
   type: EventType;
   title: string;
-  event_date: string; // YYYY-MM-DD
-  gather_time: string | null; // HH:MM:SS
-  start_time: string;
-  end_time: string;
+  start_date: string; // YYYY-MM-DD, 첫날
+  end_date: string; // 마지막 날
+  all_days_required: boolean;
   location_name: string;
   address: string;
   notice: string;
@@ -27,11 +28,27 @@ export interface EventRow {
 }
 
 export const EVENT_COLUMNS =
-  "id, type, title, event_date, gather_time, start_time, end_time, location_name, address, notice, status, apply_deadline, pay_date, cancel_reason";
+  "id, type, title, start_date, end_date, all_days_required, location_name, address, notice, status, apply_deadline, pay_date, cancel_reason";
+
+// 일정 안의 날짜(일차). 날짜마다 시간과 모집 역할이 따로다.
+export interface DayRow {
+  id: string;
+  event_id: string;
+  day_date: string;
+  kind: DayKind;
+  recruit: DayRecruit;
+  gather_time: string | null; // HH:MM:SS
+  start_time: string;
+  end_time: string;
+  sort_order: number;
+}
+
+export const DAY_COLUMNS = "id, event_id, day_date, kind, recruit, gather_time, start_time, end_time, sort_order";
 
 export interface PositionRow {
   id: string;
   event_id: string;
+  day_id: string;
   role_id: string | null;
   role_name: string;
   pay_type: PayType;
@@ -42,7 +59,7 @@ export interface PositionRow {
   sort_order: number;
 }
 
-export const POSITION_COLUMNS = "id, event_id, role_id, role_name, pay_type, rate, min_paid_hours, overtime_rate, headcount, sort_order";
+export const POSITION_COLUMNS = "id, event_id, day_id, role_id, role_name, pay_type, rate, min_paid_hours, overtime_rate, headcount, sort_order";
 
 // position_selected_counts 함수가 돌려주는 역할별 확정 인원
 export interface SelectedCount {
@@ -55,7 +72,10 @@ export interface ExtraRuleRow {
   type: ExtraPayType;
   tier: ExtraTier;
   amount: number;
+  per_day: boolean; // true: 참여한 날마다, false: 일정당 한 번
 }
+
+export const EXTRA_COLUMNS = "type, tier, amount, per_day";
 
 export const EVENT_TYPE_LABEL: Record<EventType, string> = {
   written_exam: "필기시험",
@@ -63,6 +83,10 @@ export const EVENT_TYPE_LABEL: Record<EventType, string> = {
   event: "행사",
   other: "기타",
 };
+
+export const DAY_KIND_LABEL: Record<DayKind, string> = { setup: "세팅", main: "진행", other: "기타" };
+export const DAY_RECRUIT_LABEL: Record<DayRecruit, string> = { open: "공개 모집", assign: "대표 지정" };
+export const EXTRA_TYPE_LABEL: Record<ExtraPayType, string> = { transport: "교통비", regional: "지방비" };
 
 export const EVENT_STATUS_LABEL: Record<EventStatus, string> = {
   draft: "임시저장",
@@ -104,6 +128,22 @@ export function formatEventDate(date: string): string {
   return `${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 (${WEEKDAYS[d.getUTCDay()]})`;
 }
 
+// 2026-11-07 → 11/7(토)
+export function formatShortDate(date: string): string {
+  const d = parseDate(date);
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}(${WEEKDAYS[d.getUTCDay()]})`;
+}
+
+// 하루면 "11월 8일 (일)", 여러 날이면 "11월 7일 (토) ~ 11월 9일 (월)"
+export function formatEventRange(start: string, end: string): string {
+  return start === end ? formatEventDate(start) : `${formatEventDate(start)} ~ ${formatEventDate(end)}`;
+}
+
+// 11/7(토) 세팅
+export function dayLabel(day: Pick<DayRow, "day_date" | "kind">): string {
+  return `${formatShortDate(day.day_date)} ${DAY_KIND_LABEL[day.kind]}`;
+}
+
 // 08:00:00 → 08:00
 export function formatTime(time: string | null): string {
   return time ? time.slice(0, 5) : "";
@@ -141,13 +181,38 @@ export function toRoleRate(position: Pick<PositionRow, "pay_type" | "rate" | "mi
   };
 }
 
+export interface ExtraItem {
+  type: ExtraPayType;
+  amount: number;
+  perDay: boolean;
+}
+
 // 이 등급의 회원이 받는 추가 지급 (교통비는 전원, 지방비는 등급별 → 없으면 전원 금액)
-export function extrasForTier(rules: ExtraRuleRow[], tier: MemberTier): { transport: number; regional: number } {
+export function extrasForTier(rules: ExtraRuleRow[], tier: MemberTier): ExtraItem[] {
   const pick = (type: ExtraPayType) =>
-    rules.find((r) => r.type === type && r.tier === tier)?.amount ??
-    rules.find((r) => r.type === type && r.tier === "all")?.amount ??
-    0;
-  return { transport: pick("transport"), regional: pick("regional") };
+    rules.find((r) => r.type === type && r.tier === tier) ?? rules.find((r) => r.type === type && r.tier === "all");
+  return (["transport", "regional"] as const).flatMap((type) => {
+    const rule = pick(type);
+    return rule && rule.amount > 0 ? [{ type, amount: rule.amount, perDay: rule.per_day }] : [];
+  });
+}
+
+// 하루 참여할 때마다 붙는 금액
+export function dailyExtras(items: ExtraItem[]): number {
+  return items.filter((i) => i.perDay).reduce((sum, i) => sum + i.amount, 0);
+}
+
+// 참여한 날 수에 맞춘 추가 지급 합계 (일정당 한 번인 항목은 하루라도 참여하면 한 번)
+export function extrasTotal(items: ExtraItem[], workedDays: number): number {
+  if (workedDays <= 0) return 0;
+  return items.reduce((sum, i) => sum + (i.perDay ? i.amount * workedDays : i.amount), 0);
+}
+
+// 15,000원 (날마다) · 30,000원 (일정당)
+export function describeExtras(items: ExtraItem[], multiDay: boolean): string {
+  return items
+    .map((i) => `${EXTRA_TYPE_LABEL[i.type]} ${i.amount.toLocaleString("ko-KR")}원${multiDay ? (i.perDay ? " (참여한 날마다)" : " (일정당 한 번)") : ""}`)
+    .join(" · ");
 }
 
 // 신청 마감 입력값(datetime-local, 한국 시간)을 DB에 넣을 시각으로 바꾼다

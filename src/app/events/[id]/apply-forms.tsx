@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { Notice } from "@/components/page-shell";
 import { SubmitButton } from "@/components/submit-button";
 import { applyToEvent, cancelMyApplication, type ApplyState } from "../actions";
 
@@ -9,6 +10,13 @@ export interface PositionChoice {
   name: string;
   payText: string;
   remaining: number;
+}
+
+export interface DayChoice {
+  id: string;
+  label: string; // 11/8(일) 진행
+  timeText: string; // 집합 07:30 · 08:00–13:00
+  positions: PositionChoice[];
 }
 
 function Message({ state }: { state: ApplyState }) {
@@ -27,41 +35,110 @@ function Message({ state }: { state: ApplyState }) {
   return null;
 }
 
-// 역할을 골라 신청한다. 자리가 다 찼어도 대기로 신청할 수 있다.
-export function ApplyForm({ eventId, positions, initialPositionId }: { eventId: string; positions: PositionChoice[]; initialPositionId?: string }) {
+function PositionRadios({ day, picked, onPick }: { day: DayChoice; picked: string; onPick: (id: string) => void }) {
+  return (
+    <fieldset className="flex flex-col gap-2">
+      <legend className="mb-2 text-sm font-bold">{day.positions.length > 1 ? "하고 싶은 역할" : "역할"}</legend>
+      {day.positions.map((p) => (
+        <label
+          key={p.id}
+          className="flex cursor-pointer items-center gap-3 rounded-lg border border-field bg-white px-4 py-3 has-[:checked]:border-brand has-[:checked]:bg-brand-soft has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand"
+        >
+          <input type="radio" name={`role-${day.id}`} value={p.id} checked={picked === p.id} onChange={() => onPick(p.id)} className="h-4 w-4 accent-brand" />
+          <span className="flex flex-1 flex-col">
+            <span className="font-bold">{p.name}</span>
+            <span className="text-[13px] text-muted">{p.payText}</span>
+          </span>
+          <span className={`text-[13px] ${p.remaining > 0 ? "text-body" : "font-bold text-warn"}`}>{p.remaining > 0 ? `${p.remaining}자리 남음` : "대기 신청"}</span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+// 참여할 날짜를 고르고 날짜마다 역할을 하나씩 골라 신청한다. 자리가 다 찼어도 대기로 신청할 수 있다.
+// allRequired면 모든 날짜를 함께 신청해야 한다.
+export function ApplyForm({
+  eventId,
+  days,
+  allRequired,
+  initialPicks = {},
+}: {
+  eventId: string;
+  days: DayChoice[];
+  allRequired: boolean;
+  initialPicks?: Record<string, string>;
+}) {
   const [state, action] = useActionState<ApplyState, FormData>(applyToEvent, {});
-  const [picked, setPicked] = useState(initialPositionId ?? (positions.length === 1 ? positions[0].id : ""));
+  const single = days.length === 1;
+  const [joined, setJoined] = useState<Set<string>>(() => new Set(single || allRequired ? days.map((d) => d.id) : Object.keys(initialPicks)));
+  const [picks, setPicks] = useState<Record<string, string>>(() => {
+    const auto = Object.fromEntries(days.filter((d) => d.positions.length === 1).map((d) => [d.id, d.positions[0].id]));
+    return { ...auto, ...initialPicks };
+  });
+
+  const chosen = days.filter((d) => joined.has(d.id));
+  const missingRole = chosen.filter((d) => !picks[d.id]);
+  const ready = chosen.length > 0 && missingRole.length === 0;
+
+  function toggleDay(id: string) {
+    setJoined((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
-    <form action={action} className="flex flex-col gap-3">
+    <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="eventId" value={eventId} />
-      <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 text-sm font-bold">하고 싶은 역할</legend>
-        {positions.map((p) => (
-          <label
-            key={p.id}
-            className="flex cursor-pointer items-center gap-3 rounded-lg border border-field bg-white px-4 py-3 has-[:checked]:border-brand has-[:checked]:bg-brand-soft has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand"
-          >
-            <input type="radio" name="positionId" value={p.id} checked={picked === p.id} onChange={() => setPicked(p.id)} className="h-4 w-4 accent-brand" />
-            <span className="flex flex-1 flex-col">
-              <span className="font-bold">{p.name}</span>
-              <span className="text-[13px] text-muted">{p.payText}</span>
-            </span>
-            <span className={`text-[13px] ${p.remaining > 0 ? "text-body" : "font-bold text-warn"}`}>
-              {p.remaining > 0 ? `${p.remaining}자리 남음` : "대기 신청"}
-            </span>
-          </label>
-        ))}
-      </fieldset>
-      <SubmitButton pendingText="신청하는 중…" className="h-12 text-[15px]">
-        신청하기
+      {chosen.map((d) => picks[d.id] && <input key={d.id} type="hidden" name="positionId" value={picks[d.id]} />)}
+
+      {allRequired && !single && <Notice>이 일정은 모든 날짜에 참여할 수 있는 분만 신청할 수 있어요.</Notice>}
+
+      {single ? (
+        <PositionRadios day={days[0]} picked={picks[days[0].id] ?? ""} onPick={(id) => setPicks((p) => ({ ...p, [days[0].id]: id }))} />
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {days.map((d) => {
+            const on = joined.has(d.id);
+            return (
+              <li key={d.id} className={`flex flex-col gap-3 rounded-xl border p-4 ${on ? "border-brand" : "border-line"}`}>
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={allRequired}
+                    onChange={() => toggleDay(d.id)}
+                    className="mt-0.5 h-5 w-5 accent-brand"
+                  />
+                  <span className="flex flex-col">
+                    <span className="font-bold">{d.label}</span>
+                    <span className="text-[13px] text-muted">{d.timeText}</span>
+                  </span>
+                </label>
+                {on && <PositionRadios day={d} picked={picks[d.id] ?? ""} onPick={(id) => setPicks((p) => ({ ...p, [d.id]: id }))} />}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {!ready && (
+        <p className="text-[13px] text-muted">
+          {chosen.length === 0 ? "참여할 날짜를 골라 주세요." : `${missingRole.map((d) => d.label).join(", ")}의 역할을 골라 주세요.`}
+        </p>
+      )}
+      <SubmitButton pendingText="신청하는 중…" className="h-12 text-[15px]" disabled={!ready}>
+        {single || chosen.length === 0 ? "신청하기" : `${chosen.length}일 신청하기`}
       </SubmitButton>
       <Message state={state} />
     </form>
   );
 }
 
-// 확정 전(신청·대기)에만 직접 취소할 수 있다
+// 확정 전(신청·대기)에만 직접 취소할 수 있다. 이 일정에 신청한 날짜를 모두 취소한다.
 export function CancelForm({ eventId }: { eventId: string }) {
   const [state, action] = useActionState<ApplyState, FormData>(cancelMyApplication, {});
   const [open, setOpen] = useState(false);

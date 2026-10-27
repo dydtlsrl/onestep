@@ -19,12 +19,13 @@ function refresh(eventId: string) {
 
 export async function applyToEvent(_prev: ApplyState, formData: FormData): Promise<ApplyState> {
   const eventId = z.uuid().safeParse(formData.get("eventId"));
-  const positionId = z.uuid().safeParse(formData.get("positionId"));
+  // 날짜마다 고른 역할 하나씩
+  const positionIds = z.array(z.uuid()).min(1).max(31).safeParse(formData.getAll("positionId"));
   if (!eventId.success) return { error: "잘못된 요청이에요." };
-  if (!positionId.success) return { error: "하고 싶은 역할을 골라 주세요." };
+  if (!positionIds.success) return { error: "참여할 날짜와 역할을 골라 주세요." };
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("apply_to_event", { p_event_id: eventId.data, p_position_id: positionId.data });
+  const { error } = await supabase.rpc("apply_to_event", { p_event_id: eventId.data, p_position_ids: positionIds.data });
   if (error) return { error: messageForError(error) };
 
   refresh(eventId.data);

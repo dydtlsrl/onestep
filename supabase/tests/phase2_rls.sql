@@ -1,4 +1,5 @@
--- 2단계 권한·흐름 테스트 (일정 공개, 신청·선발, 알림, 출석 확인)
+-- 2단계 권한·흐름 테스트 (일정 공개, 신청·선발, 알림, 출석 확인). 하루짜리 일정으로 확인한다.
+-- 여러 날짜 일정은 phase2b_rls.sql
 -- 실행: npm run db:test
 
 \set ON_ERROR_STOP on
@@ -32,13 +33,15 @@ reset role;
 
 select tests.act_as('00000000-0000-0000-0000-00000000003a');
 set role authenticated;
-select tests.expect_error($$select public.create_event('{"type":"written_exam","title":"x","event_date":"2026-11-08","start_time":"08:00","end_time":"13:00"}', '[]', '[]', '', '')$$, 'POSITIONS_REQUIRED');
-select tests.expect_error($$select public.create_event('{"type":"written_exam","title":"x","event_date":"2026-11-08","start_time":"13:00","end_time":"08:00"}', '[{"role_name":"감독관","pay_type":"hourly","rate":12000,"headcount":1}]', '[]', '', '')$$, 'INVALID_INPUT');
-select tests.expect_error($$select public.create_event('{"type":"written_exam","title":"x","event_date":"2026-11-08","start_time":"08:00","end_time":"13:00","chat_link":"http://x"}', '[{"role_name":"감독관","pay_type":"hourly","rate":12000,"headcount":1}]', '[]', '', '')$$, 'INVALID_INPUT');
+select tests.expect_error($$select public.create_event('{"type":"written_exam","title":"x"}', '[]', '[]', '', '')$$, 'DAYS_REQUIRED');
+select tests.expect_error($$select public.create_event('{"type":"written_exam","title":"x"}', '[{"day_date":"2026-11-08","start_time":"08:00","end_time":"13:00","positions":[]}]', '[]', '', '')$$, 'POSITIONS_REQUIRED');
+select tests.expect_error($$select public.create_event('{"type":"written_exam","title":"x"}', '[{"day_date":"2026-11-08","start_time":"13:00","end_time":"08:00","positions":[{"role_name":"감독관","pay_type":"hourly","rate":12000,"headcount":1}]}]', '[]', '', '')$$, 'INVALID_INPUT');
+select tests.expect_error($$select public.create_event('{"type":"written_exam","title":"x","chat_link":"http://x"}', '[{"day_date":"2026-11-08","start_time":"08:00","end_time":"13:00","positions":[{"role_name":"감독관","pay_type":"hourly","rate":12000,"headcount":1}]}]', '[]', '', '')$$, 'INVALID_INPUT');
+select tests.expect_count('select * from public.events', 0, '잘못 만든 일정은 남지 않음');
 
 select public.create_event(
-  '{"type":"written_exam","title":"대기업 공채 필기시험","event_date":"2026-11-08","gather_time":"07:30","start_time":"08:00","end_time":"13:00","location_name":"OO중학교","address":"서울 송파구","notice":"신분증 지참","chat_link":"https://open.kakao.com/o/test","pay_date":"2026-11-15"}',
-  '[{"role_name":"감독관","pay_type":"hourly","rate":12000,"min_paid_hours":4,"overtime_rate":99999,"headcount":2},{"role_name":"안내","pay_type":"daily","rate":110000,"min_paid_hours":3,"overtime_rate":15000,"headcount":1}]',
+  '{"type":"written_exam","title":"대기업 공채 필기시험","location_name":"OO중학교","address":"서울 송파구","notice":"신분증 지참","chat_link":"https://open.kakao.com/o/test","pay_date":"2026-11-15"}',
+  '[{"day_date":"2026-11-08","gather_time":"07:30","start_time":"08:00","end_time":"13:00","positions":[{"role_name":"감독관","pay_type":"hourly","rate":12000,"min_paid_hours":4,"overtime_rate":99999,"headcount":2},{"role_name":"안내","pay_type":"daily","rate":110000,"min_paid_hours":3,"overtime_rate":15000,"headcount":1}]}]',
   '[{"type":"transport","tier":"all","amount":10000},{"type":"regional","tier":"core","amount":30000},{"type":"regional","tier":"general","amount":0}]',
   '고객사A', '내부 메모'
 ) as ev1 \gset
@@ -46,8 +49,9 @@ reset role;
 
 select id as pos_sup from public.event_positions where event_id = :'ev1' and role_name = '감독관' \gset
 select id as pos_guide from public.event_positions where event_id = :'ev1' and role_name = '안내' \gset
+select id as day1 from public.event_days where event_id = :'ev1' \gset
 
-select tests.expect_count($$select 1 from public.events where status = 'draft' and title = '대기업 공채 필기시험'$$, 1, '대표: 임시저장 상태로 생성');
+select tests.expect_count($$select 1 from public.events where status = 'draft' and title = '대기업 공채 필기시험' and start_date = '2026-11-08' and end_date = '2026-11-08'$$, 1, '대표: 임시저장 상태로 생성, 날짜는 1일차에서');
 select tests.expect_count($$select 1 from public.event_positions where role_name = '감독관' and pay_type = 'hourly' and min_paid_hours = 4 and overtime_rate is null and sort_order = 1$$, 1, '시급 역할: 최소 보장 시간만 저장 (초과 금액은 버림)');
 select tests.expect_count($$select 1 from public.event_positions where role_name = '안내' and pay_type = 'daily' and overtime_rate = 15000 and min_paid_hours is null$$, 1, '일급 역할: 초과 금액만 저장');
 select tests.expect_count($$select 1 from public.event_extra_rules$$, 2, '추가 지급: 0원은 저장하지 않음');
@@ -60,7 +64,7 @@ set role authenticated;
 select tests.expect_count('select * from public.events', 0, '핵심 회원: 임시저장 일정이 안 보임');
 select tests.expect_count('select * from public.event_positions', 0, '핵심 회원: 임시저장 일정의 역할이 안 보임');
 select tests.expect_count('select * from public.event_internal', 0, '회원: 고객사 정보는 안 보임');
-select tests.expect_error(format('select public.apply_to_event(%L, %L)', :'ev1', :'pos_sup'), 'EVENT_NOT_OPEN');
+select tests.expect_error(format('select public.apply_to_event(%L, array[%L]::uuid[])', :'ev1', :'pos_sup'), 'EVENT_NOT_OPEN');
 reset role;
 
 
@@ -78,7 +82,7 @@ select tests.expect_count($$select 1 from public.notifications where user_id in 
 select tests.act_as('00000000-0000-0000-0000-00000000003c');
 set role authenticated;
 select tests.expect_count('select * from public.events', 0, '일반 회원: 핵심 공개 일정이 안 보임');
-select tests.expect_error(format('select public.apply_to_event(%L, %L)', :'ev1', :'pos_sup'), 'EVENT_NOT_OPEN');
+select tests.expect_error(format('select public.apply_to_event(%L, array[%L]::uuid[])', :'ev1', :'pos_sup'), 'EVENT_NOT_OPEN');
 reset role;
 
 select tests.act_as('00000000-0000-0000-0000-00000000003b');
@@ -86,9 +90,9 @@ set role authenticated;
 select tests.expect_count('select * from public.events', 1, '핵심 회원: 핵심 공개 일정이 보임');
 select tests.expect_count('select * from public.event_positions', 2, '핵심 회원: 모집 역할이 보임');
 select tests.expect_count('select * from public.event_extra_rules', 2, '핵심 회원: 교통비·지방비가 보임');
-select tests.expect_error(format('select public.apply_to_event(%L, %L)', :'ev1', '00000000-0000-0000-0000-000000000000'), 'INVALID_INPUT');
-select public.apply_to_event(:'ev1', :'pos_sup');
-select tests.expect_error(format('select public.apply_to_event(%L, %L)', :'ev1', :'pos_sup'), 'ALREADY_APPLIED_EVENT');
+select tests.expect_error(format('select public.apply_to_event(%L, array[%L]::uuid[])', :'ev1', '00000000-0000-0000-0000-000000000000'), 'INVALID_INPUT');
+select public.apply_to_event(:'ev1', array[:'pos_sup']::uuid[]);
+select tests.expect_error(format('select public.apply_to_event(%L, array[%L]::uuid[])', :'ev1', :'pos_sup'), 'ALREADY_APPLIED_EVENT');
 select tests.expect_count('select * from public.applications', 1, '핵심 회원: 자기 신청이 보임');
 select tests.expect_count($$select * from public.app_settings where key = 'pay_rules'$$, 1, '활동 회원: 보수 계산 규칙을 볼 수 있음');
 reset role;
@@ -108,25 +112,25 @@ select tests.expect_count($$select 1 from public.notifications where user_id in 
 select tests.act_as('00000000-0000-0000-0000-00000000003c');
 set role authenticated;
 select tests.expect_count('select * from public.events', 1, '일반 회원: 전체 공개 일정이 보임');
-select public.apply_to_event(:'ev1', :'pos_sup');
+select public.apply_to_event(:'ev1', array[:'pos_sup']::uuid[]);
 select tests.expect_count('select * from public.applications', 1, '일반 회원: 다른 사람 신청은 안 보임');
 select tests.expect_count(format('select * from public.position_selected_counts(array[%L]::uuid[])', :'ev1'), 2, '일반 회원: 역할별 확정 인원(남은 자리)은 볼 수 있음');
 reset role;
 
 select tests.act_as('00000000-0000-0000-0000-00000000003d');
 set role authenticated;
-select public.apply_to_event(:'ev1', :'pos_guide');
+select public.apply_to_event(:'ev1', array[:'pos_guide']::uuid[]);
 reset role;
 
 select tests.act_as('00000000-0000-0000-0000-00000000003e');
 set role authenticated;
 select tests.expect_count('select * from public.events', 0, '승인 대기: 일정이 안 보임');
-select tests.expect_error(format('select public.apply_to_event(%L, %L)', :'ev1', :'pos_sup'), 'NOT_ACTIVE_MEMBER');
+select tests.expect_error(format('select public.apply_to_event(%L, array[%L]::uuid[])', :'ev1', :'pos_sup'), 'NOT_ACTIVE_MEMBER');
 reset role;
 select tests.act_as('00000000-0000-0000-0000-00000000003f');
 set role authenticated;
 select tests.expect_count('select * from public.events', 0, '제한 회원: 일정이 안 보임');
-select tests.expect_error(format('select public.apply_to_event(%L, %L)', :'ev1', :'pos_sup'), 'NOT_ACTIVE_MEMBER');
+select tests.expect_error(format('select public.apply_to_event(%L, array[%L]::uuid[])', :'ev1', :'pos_sup'), 'NOT_ACTIVE_MEMBER');
 select tests.expect_count($$select * from public.app_settings$$, 0, '제한 회원: 보수 계산 규칙도 안 보임');
 reset role;
 
@@ -137,7 +141,7 @@ select tests.act_as('00000000-0000-0000-0000-00000000003d');
 set role authenticated;
 select public.cancel_application(:'ev1', '일정이 겹침');
 select tests.expect_count($$select 1 from public.applications where status = 'cancelled' and cancel_reason = '일정이 겹침'$$, 1, '회원: 선발 전에는 직접 취소');
-select public.apply_to_event(:'ev1', :'pos_guide');
+select public.apply_to_event(:'ev1', array[:'pos_guide']::uuid[]);
 select tests.expect_count($$select 1 from public.applications where status = 'applied'$$, 1, '회원: 취소한 뒤 다시 신청');
 reset role;
 
@@ -145,7 +149,7 @@ update public.events set apply_deadline = now() - interval '1 minute' where id =
 select tests.act_as('00000000-0000-0000-0000-00000000003d');
 set role authenticated;
 select public.cancel_application(:'ev1', '');
-select tests.expect_error(format('select public.apply_to_event(%L, %L)', :'ev1', :'pos_guide'), 'DEADLINE_PASSED');
+select tests.expect_error(format('select public.apply_to_event(%L, array[%L]::uuid[])', :'ev1', :'pos_guide'), 'DEADLINE_PASSED');
 reset role;
 update public.events set apply_deadline = null where id = :'ev1';
 
@@ -220,7 +224,7 @@ reset role;
 
 select tests.expect_count($$select 1 from public.applications where member_id = '00000000-0000-0000-0000-00000000003b' and attendance = 'attended' and overtime_minutes = 60$$, 1, '출석: 참석과 초과 60분 저장');
 select tests.expect_count($$select 1 from public.applications where member_id = '00000000-0000-0000-0000-00000000003d' and attendance = 'no_show' and overtime_minutes = 0$$, 1, '출석: 노쇼는 초과 시간 0');
-select tests.expect_count($$select 1 from public.member_notes where member_id = '00000000-0000-0000-0000-00000000003d' and type = 'no_show' and auto_source = 'attendance' and content = '11/8 대기업 공채 필기시험 · 노쇼'$$, 1, '출석: 노쇼가 관리자 기록에 자동으로 남음');
+select tests.expect_count($$select 1 from public.member_notes where member_id = '00000000-0000-0000-0000-00000000003d' and type = 'no_show' and auto_source = 'attendance' and content = '11/8 진행 · 대기업 공채 필기시험 · 노쇼' and application_id is not null$$, 1, '출석: 노쇼가 관리자 기록에 자동으로 남음');
 
 select tests.act_as('00000000-0000-0000-0000-00000000003a');
 set role authenticated;
@@ -247,16 +251,17 @@ reset role;
 select tests.act_as('00000000-0000-0000-0000-00000000003a');
 set role authenticated;
 select tests.expect_error(format($$select public.update_event(%L,
-  '{"type":"written_exam","title":"대기업 공채 필기시험","event_date":"2026-11-08","start_time":"08:00","end_time":"13:00"}',
-  '[{"id":"%s","role_name":"감독관","pay_type":"hourly","rate":12000,"headcount":3}]', '[]', '', '')$$, :'ev1', :'pos_sup'), 'POSITION_IN_USE');
+  '{"type":"written_exam","title":"대기업 공채 필기시험"}',
+  '[{"id":"%s","day_date":"2026-11-08","start_time":"08:00","end_time":"13:00","positions":[{"id":"%s","role_name":"감독관","pay_type":"hourly","rate":12000,"headcount":3}]}]', '[]', '', '')$$, :'ev1', :'day1', :'pos_sup'), 'POSITION_IN_USE');
 select public.update_event(:'ev1',
-  '{"type":"written_exam","title":"대기업 공채 필기시험 (수정)","event_date":"2026-11-08","gather_time":"07:30","start_time":"08:00","end_time":"14:00","chat_link":"https://open.kakao.com/o/test"}',
-  format('[{"id":"%s","role_name":"감독관","pay_type":"hourly","rate":12500,"min_paid_hours":4,"headcount":3},{"id":"%s","role_name":"안내","pay_type":"daily","rate":110000,"overtime_rate":15000,"headcount":1},{"role_name":"대기실","pay_type":"hourly","rate":11000,"headcount":1}]', :'pos_sup', :'pos_guide')::jsonb,
+  '{"type":"written_exam","title":"대기업 공채 필기시험 (수정)","chat_link":"https://open.kakao.com/o/test"}',
+  format('[{"id":"%s","day_date":"2026-11-08","gather_time":"07:30","start_time":"08:00","end_time":"14:00","positions":[{"id":"%s","role_name":"감독관","pay_type":"hourly","rate":12500,"min_paid_hours":4,"headcount":3},{"id":"%s","role_name":"안내","pay_type":"daily","rate":110000,"overtime_rate":15000,"headcount":1},{"role_name":"대기실","pay_type":"hourly","rate":11000,"headcount":1}]}]', :'day1', :'pos_sup', :'pos_guide')::jsonb,
   '[]', '고객사A', '');
 reset role;
 select tests.expect_count($$select 1 from public.event_positions where role_name = '감독관' and rate = 12500 and headcount = 3$$, 1, '수정: 있는 역할의 단가·인원 변경');
 select tests.expect_count(format($$select 1 from public.event_positions where event_id = %L$$, :'ev1'), 3, '수정: 새 역할 추가');
 select tests.expect_count(format($$select 1 from public.event_extra_rules where event_id = %L$$, :'ev1'), 0, '수정: 추가 지급을 비움');
+select tests.expect_count($$select 1 from public.event_days where end_time = '14:00'$$, 1, '수정: 날짜의 시간 변경');
 
 
 -- 10. 완료와 취소 -------------------------------------------------------------------------
@@ -275,8 +280,8 @@ select tests.act_as('00000000-0000-0000-0000-00000000003a');
 set role authenticated;
 
 select public.create_event(
-  '{"type":"interview","title":"공공기관 면접","event_date":"2026-11-11","start_time":"09:00","end_time":"17:00"}',
-  '[{"role_name":"대기실","pay_type":"hourly","rate":11000,"headcount":2}]', '[]', '', ''
+  '{"type":"interview","title":"공공기관 면접"}',
+  '[{"day_date":"2026-11-11","start_time":"09:00","end_time":"17:00","positions":[{"role_name":"대기실","pay_type":"hourly","rate":11000,"headcount":2}]}]', '[]', '', ''
 ) as ev2 \gset
 select public.set_event_status(:'ev2', 'open_all');
 reset role;
@@ -284,7 +289,7 @@ reset role;
 select id as pos_ev2 from public.event_positions where event_id = :'ev2' \gset
 select tests.act_as('00000000-0000-0000-0000-00000000003c');
 set role authenticated;
-select public.apply_to_event(:'ev2', :'pos_ev2');
+select public.apply_to_event(:'ev2', array[:'pos_ev2']::uuid[]);
 reset role;
 
 select tests.act_as('00000000-0000-0000-0000-00000000003a');

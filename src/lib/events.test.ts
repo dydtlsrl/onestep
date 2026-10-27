@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  dailyExtras,
+  dayLabel,
+  describeExtras,
   extrasForTier,
+  extrasTotal,
   formatEventDate,
+  formatEventRange,
+  formatShortDate,
   isoToKstLocal,
   kstLocalToIso,
   scheduledMinutes,
@@ -40,18 +46,39 @@ describe("suggestPayDate", () => {
 
 describe("extrasForTier", () => {
   const rules = [
-    { type: "transport" as const, tier: "all" as const, amount: 10000 },
-    { type: "regional" as const, tier: "core" as const, amount: 30000 },
-    { type: "regional" as const, tier: "general" as const, amount: 20000 },
+    { type: "transport" as const, tier: "all" as const, amount: 10000, per_day: true },
+    { type: "regional" as const, tier: "core" as const, amount: 30000, per_day: false },
+    { type: "regional" as const, tier: "general" as const, amount: 20000, per_day: false },
   ];
 
   it("교통비는 전원, 지방비는 등급별", () => {
-    expect(extrasForTier(rules, "core")).toEqual({ transport: 10000, regional: 30000 });
-    expect(extrasForTier(rules, "general")).toEqual({ transport: 10000, regional: 20000 });
+    expect(extrasForTier(rules, "core")).toEqual([
+      { type: "transport", amount: 10000, perDay: true },
+      { type: "regional", amount: 30000, perDay: false },
+    ]);
+    expect(extrasForTier(rules, "general")[1]).toEqual({ type: "regional", amount: 20000, perDay: false });
   });
 
-  it("없으면 0", () => {
-    expect(extrasForTier([], "core")).toEqual({ transport: 0, regional: 0 });
+  it("없으면 빈 목록", () => {
+    expect(extrasForTier([], "core")).toEqual([]);
+  });
+
+  it("참여한 날 수에 맞춰 더한다 (일정당 항목은 한 번)", () => {
+    const items = extrasForTier(rules, "core");
+    expect(dailyExtras(items)).toBe(10000);
+    expect(extrasTotal(items, 3)).toBe(10000 * 3 + 30000);
+    expect(extrasTotal(items, 0)).toBe(0);
+    expect(describeExtras(items, true)).toBe("교통비 10,000원 (참여한 날마다) · 지방비 30,000원 (일정당 한 번)");
+    expect(describeExtras(items, false)).toBe("교통비 10,000원 · 지방비 30,000원");
+  });
+});
+
+describe("날짜 표시", () => {
+  it("짧은 날짜, 기간, 날짜 이름", () => {
+    expect(formatShortDate("2026-11-07")).toBe("11/7(토)");
+    expect(formatEventRange("2026-11-08", "2026-11-08")).toBe("11월 8일 (일)");
+    expect(formatEventRange("2026-11-07", "2026-11-09")).toBe("11월 7일 (토) ~ 11월 9일 (월)");
+    expect(dayLabel({ day_date: "2026-11-07", kind: "setup" })).toBe("11/7(토) 세팅");
   });
 });
 

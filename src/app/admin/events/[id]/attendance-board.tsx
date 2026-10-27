@@ -15,7 +15,25 @@ export interface AttendanceRow {
   rate: RoleRate;
   attendance: Attendance;
   overtimeMinutes: number;
-  extras: number; // 교통비 + 지방비
+  extras: number; // 이 날 붙는 교통비·지방비 (참여한 날마다 주는 것만)
+}
+
+export interface AttendanceDay {
+  id: string;
+  label: string;
+  scheduledMinutes: number;
+  rows: AttendanceRow[];
+}
+
+// 사람별 합계 (저장된 출석 기준)
+export interface PersonTotal {
+  memberId: string;
+  name: string;
+  tier: MemberTier;
+  workedDays: number;
+  totalDays: number;
+  pay: number;
+  extras: number;
 }
 
 const OPTIONS: Attendance[] = ["attended", "late", "no_show", "unknown"];
@@ -93,29 +111,78 @@ function Row({ eventId, row, rules, scheduled }: { eventId: string; row: Attenda
   );
 }
 
-// 출석 확인: 확정자별 참석·지각·노쇼와 초과 시간. 예상 지급액(세금 공제 전)을 함께 보여 준다.
+// 출석 확인: 날짜별로 확정자의 참석·지각·노쇼와 초과 시간을 넣는다. 예상 지급액(세금 공제 전)을 함께 보여 준다.
 export function AttendanceBoard({
   eventId,
-  rows,
+  days,
   rules,
-  scheduledMinutes,
+  totals,
 }: {
   eventId: string;
-  rows: AttendanceRow[];
+  days: AttendanceDay[];
   rules: PayRules;
-  scheduledMinutes: number;
+  totals: PersonTotal[];
 }) {
-  if (rows.length === 0) return <p className="rounded-xl border border-line bg-white p-8 text-center text-muted">확정된 사람이 없어요.</p>;
+  if (days.every((d) => d.rows.length === 0)) return <p className="rounded-xl border border-line bg-white p-8 text-center text-muted">확정된 사람이 없어요.</p>;
+  const multiDay = days.length > 1;
   return (
-    <section className="flex flex-col gap-2 rounded-xl border border-line bg-white px-5 py-3">
+    <div className="flex flex-col gap-4">
       <p className="text-[13px] leading-relaxed text-muted">
         노쇼·지각으로 저장하면 관리자 기록에 자동으로 남아요. 금액은 세금 공제 전 예상액이며, 실제 지급액은 정산 단계에서 확정해요.
       </p>
-      <ul className="flex flex-col">
-        {rows.map((row) => (
-          <Row key={row.id} eventId={eventId} row={row} rules={rules} scheduled={scheduledMinutes} />
-        ))}
-      </ul>
-    </section>
+      {days.map((day) => (
+        <section key={day.id} aria-label={`${day.label} 출석`} className="flex flex-col gap-2 rounded-xl border border-line bg-white px-5 py-3">
+          {multiDay && (
+            <h3 className="pt-1 font-bold">
+              {day.label} <span className="text-sm font-normal text-muted">· 확정 {day.rows.length}명</span>
+            </h3>
+          )}
+          {day.rows.length === 0 ? (
+            <p className="py-3 text-sm text-muted">이 날짜에 확정된 사람이 없어요.</p>
+          ) : (
+            <ul className="flex flex-col">
+              {day.rows.map((row) => (
+                <Row key={row.id} eventId={eventId} row={row} rules={rules} scheduled={day.scheduledMinutes} />
+              ))}
+            </ul>
+          )}
+        </section>
+      ))}
+      {totals.length > 0 && (
+        <section aria-labelledby="totals-title" className="flex flex-col gap-2">
+          <h3 id="totals-title" className="font-bold">
+            사람별 합계 <span className="text-sm font-normal text-muted">(저장한 출석 기준, 세금 공제 전)</span>
+          </h3>
+          <div className="overflow-x-auto rounded-xl border border-line bg-white">
+            <table className="w-full min-w-[560px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-line bg-[#f8f9fa] text-left text-[13px] text-body">
+                  <th scope="col" className="px-4 py-3 font-bold">이름</th>
+                  <th scope="col" className="px-3 py-3 text-right font-bold">참여한 날</th>
+                  <th scope="col" className="px-3 py-3 text-right font-bold">보수</th>
+                  <th scope="col" className="px-3 py-3 text-right font-bold">추가 지급</th>
+                  <th scope="col" className="px-4 py-3 text-right font-bold">합계</th>
+                </tr>
+              </thead>
+              <tbody>
+                {totals.map((t) => (
+                  <tr key={t.memberId} className="border-b border-[#eef0f3] last:border-0">
+                    <td className="px-4 py-2.5">
+                      <span className="font-bold">{t.name}</span> <span className="text-[12px] text-muted">{TIER_LABEL[t.tier]}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      {t.workedDays} / {t.totalDays}일
+                    </td>
+                    <td className="px-3 py-2.5 text-right">{formatWon(t.pay)}</td>
+                    <td className="px-3 py-2.5 text-right">{formatWon(t.extras)}</td>
+                    <td className="px-4 py-2.5 text-right font-bold">{formatWon(t.pay + t.extras)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </div>
   );
 }
