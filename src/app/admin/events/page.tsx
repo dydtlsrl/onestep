@@ -21,8 +21,7 @@ interface ListRow {
   start_date: string;
   end_date: string;
   status: EventStatus;
-  event_days: { day_date: string; kind: DayKind; start_time: string; end_time: string }[];
-  event_positions: { headcount: number }[];
+  event_days: { day_date: string; kind: DayKind; start_time: string; end_time: string; headcount: number }[];
   applications: { status: ApplicationStatus }[];
 }
 
@@ -32,7 +31,7 @@ async function loadEvents(supabase: Supabase, past: boolean) {
   const today = todayKst(Date.now());
   let query = supabase
     .from("events")
-    .select("id, type, title, start_date, end_date, status, event_days(day_date, kind, start_time, end_time), event_positions(headcount), applications(status)")
+    .select("id, type, title, start_date, end_date, status, event_days(day_date, kind, start_time, end_time, headcount), applications(status)")
     .limit(200);
   // 여러 날짜 일정은 마지막 날이 지나야 지난 일정이 된다
   query = past
@@ -92,7 +91,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
             </thead>
             <tbody>
               {events.map((e) => {
-                const headcount = e.event_positions.reduce((sum, p) => sum + p.headcount, 0);
+                const headcount = e.event_days.reduce((sum, d) => sum + d.headcount, 0);
                 const selected = e.applications.filter((a) => a.status === "selected").length;
                 const waiting = e.applications.filter((a) => a.status === "applied").length;
                 const days = [...e.event_days].sort((a, b) => a.day_date.localeCompare(b.day_date));

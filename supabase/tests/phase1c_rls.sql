@@ -16,8 +16,8 @@ insert into public.profiles (id, name, phone, role, status, tier, privacy_agreed
 -- 1. 처음 값 --------------------------------------------------------------------
 
 select tests.expect_count($$select 1 from public.app_settings where key = 'pay_rules' and version = 1
-  and value = '{"overtime_multiplier": 1.5, "overtime_unit_minutes": 60, "overtime_rounding": "floor", "default_min_paid_hours": 0}'::jsonb$$,
-  1, '처음 값: 1.5배, 60분 단위, 버림, 최소 보장 0시간');
+  and value = '{"overtime_multiplier": 1.5, "overtime_unit_minutes": 60, "overtime_rounding": "floor", "default_min_paid_hours": 0, "default_hourly_rate": 11000}'::jsonb$$,
+  1, '처음 값: 1.5배, 60분 단위, 버림, 최소 보장 0시간, 기본 시급 11,000원');
 select tests.expect_count($$select 1 from public.app_settings_history where key = 'pay_rules' and version = 1$$, 1, '처음 값 이력이 남음');
 
 

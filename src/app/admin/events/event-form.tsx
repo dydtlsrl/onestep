@@ -2,103 +2,19 @@
 
 import { useActionState, useState } from "react";
 import { SubmitButton } from "@/components/submit-button";
-import {
-  DAY_KIND_LABEL,
-  DAY_RECRUIT_LABEL,
-  EVENT_TYPE_LABEL,
-  formatShortDate,
-  scheduledMinutes,
-  suggestPayDate,
-  type DayKind,
-  type DayRecruit,
-  type EventType,
-} from "@/lib/events";
+import { DAY_KIND_LABEL, EVENT_TYPE_LABEL, formatShortDate, scheduledMinutes, suggestPayDate, type DayKind, type EventType } from "@/lib/events";
 import { formatWon } from "@/lib/format";
 import { calculatePay, PAY_TYPE_LABEL, type PayRules, type PayType } from "@/lib/pay";
 import { createEvent, updateEvent, type EventActionState } from "./actions";
+import { emptyEvent, SETUP_MIN_HOURS, type DayDraft, type EventFormValues, type RoleOption } from "./event-form-values";
 
-export interface RoleOption {
-  id: string;
-  name: string;
-  pay_type: PayType;
-  default_rate: number;
-  min_paid_hours: number | null;
-  overtime_rate: number | null;
-}
-
-export interface PositionDraft {
-  key: string;
-  id?: string;
-  roleId: string | null;
-  roleName: string;
-  payType: PayType;
-  rate: string;
-  minPaidHours: string;
-  overtimeRate: string;
-  headcount: string;
-}
-
-export interface DayDraft {
-  key: string;
-  id?: string;
-  dayDate: string;
-  kind: DayKind;
-  recruit: DayRecruit;
-  gatherTime: string;
-  startTime: string;
-  endTime: string;
-  positions: PositionDraft[];
-}
-
-export interface EventFormValues {
-  type: EventType;
-  title: string;
-  clientName: string;
-  locationName: string;
-  address: string;
-  notice: string;
-  chatLink: string;
-  applyDeadline: string;
-  payDate: string;
-  memo: string;
-  days: DayDraft[];
-  allDaysRequired: boolean;
-  transportOn: boolean;
-  transportAmount: string;
-  transportPerDay: boolean;
-  regionalOn: boolean;
-  regionalCore: string;
-  regionalGeneral: string;
-  regionalPerDay: boolean;
-}
-
-export const EMPTY_EVENT: EventFormValues = {
-  type: "written_exam",
-  title: "",
-  clientName: "",
-  locationName: "",
-  address: "",
-  notice: "",
-  chatLink: "",
-  applyDeadline: "",
-  payDate: "",
-  memo: "",
-  days: [{ key: "day-1", dayDate: "", kind: "main", recruit: "open", gatherTime: "", startTime: "", endTime: "", positions: [] }],
-  allDaysRequired: false,
-  transportOn: false,
-  transportAmount: "",
-  transportPerDay: true,
-  regionalOn: false,
-  regionalCore: "",
-  regionalGeneral: "",
-  regionalPerDay: true,
-};
+export type { DayDraft, EventFormValues, RoleOption };
 
 const field = "h-11 w-full rounded-lg border border-field bg-white px-3 text-sm";
 const label = "text-sm font-bold";
 
 let keySeq = 0;
-const newKey = (prefix: string) => `${prefix}-new-${++keySeq}`;
+const newKey = () => `day-new-${++keySeq}`;
 
 // 날짜 문자열에 하루를 더하거나 뺀다 (2026-11-08 → 2026-11-09)
 function shiftDate(date: string, days: number): string {
@@ -109,6 +25,7 @@ function shiftDate(date: string, days: number): string {
 }
 
 const byDate = (a: DayDraft, b: DayDraft) => (a.dayDate || "9999").localeCompare(b.dayDate || "9999") || a.startTime.localeCompare(b.startTime);
+const digitsOnly = (v: string) => v.replace(/[^0-9]/g, "");
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -144,26 +61,26 @@ function UnitSelect({ id, name, perDay, onChange }: { id: string; name: string; 
   );
 }
 
-// 일정 등록·수정 폼. 일정 안에 날짜(세팅일·진행일)를 여러 개 두고, 날짜마다 시간과 모집 역할을 정한다.
-// 모집 역할은 단가표에서 불러와 이 일정에서만 바꿀 수 있다.
+// 일정 등록·수정 폼. 일정 안에 날짜(세팅일·진행일)를 여러 개 두고, 날짜마다 시간·모집 인원·단가를 정한다.
+// 회원은 날짜만 골라 신청하고, 역할은 신청자를 보고 대표가 일정 상세에서 사람마다 정한다.
 export function EventForm({
   mode,
   eventId,
   initial,
   roles,
   rules,
-  lockedPositionIds = [],
+  lockedDayIds = [],
 }: {
   mode: "create" | "edit";
   eventId?: string;
   initial: EventFormValues;
   roles: RoleOption[];
   rules: PayRules;
-  lockedPositionIds?: string[];
+  lockedDayIds?: string[];
 }) {
   const [state, action] = useActionState<EventActionState, FormData>(mode === "create" ? createEvent : updateEvent, {});
   const [days, setDays] = useState<DayDraft[]>(initial.days);
-  // 저장한 뒤 서버에서 새 날짜·역할 id가 오면 목록을 서버 값으로 맞춘다 (같은 날짜·역할이 두 번 추가되지 않게)
+  // 저장한 뒤 서버에서 새 날짜 id가 오면 목록을 서버 값으로 맞춘다 (같은 날짜가 두 번 추가되지 않게)
   const initialKey = JSON.stringify(initial.days);
   const [syncedKey, setSyncedKey] = useState(initialKey);
   if (initialKey !== syncedKey) {
@@ -180,35 +97,22 @@ export function EventForm({
   const sorted = [...days].sort(byDate);
   const lastDate = sorted.filter((d) => d.dayDate).at(-1)?.dayDate ?? "";
   const suggested = lastDate ? suggestPayDate(lastDate) : "";
-  const openDays = days.filter((d) => d.recruit === "open").length;
   const multiDay = days.length > 1;
 
   function updateDay(key: string, patch: Partial<DayDraft>) {
     setDays((list) => list.map((d) => (d.key === key ? { ...d, ...patch } : d)));
   }
 
-  function updatePosition(dayKey: string, posKey: string, patch: Partial<PositionDraft>) {
-    setDays((list) =>
-      list.map((d) => (d.key === dayKey ? { ...d, positions: d.positions.map((p) => (p.key === posKey ? { ...p, ...patch } : p)) } : d)),
-    );
-  }
-
-  function addRole(dayKey: string, roleId: string) {
-    if (!roleId) return;
+  // 단가표의 값(지급 방식·단가·최소 보장·초과 금액)을 이 날짜에 불러온다
+  function loadRole(key: string, roleId: string) {
     const role = roles.find((r) => r.id === roleId);
-    const draft: PositionDraft = role
-      ? {
-          key: newKey("pos"),
-          roleId: role.id,
-          roleName: role.name,
-          payType: role.pay_type,
-          rate: String(role.default_rate),
-          minPaidHours: role.min_paid_hours === null ? "" : String(role.min_paid_hours),
-          overtimeRate: role.overtime_rate === null ? "" : String(role.overtime_rate),
-          headcount: "1",
-        }
-      : { key: newKey("pos"), roleId: null, roleName: "", payType: "hourly", rate: "", minPaidHours: "", overtimeRate: "", headcount: "1" };
-    setDays((list) => list.map((d) => (d.key === dayKey ? { ...d, positions: [...d.positions, draft] } : d)));
+    if (!role) return;
+    updateDay(key, {
+      payType: role.pay_type,
+      rate: String(role.default_rate),
+      minPaidHours: role.min_paid_hours === null ? "" : String(role.min_paid_hours),
+      overtimeRate: role.overtime_rate === null ? "" : String(role.overtime_rate),
+    });
   }
 
   // 마지막 날을 복사해 다음 날 진행일을 만든다
@@ -216,33 +120,29 @@ export function EventForm({
     const last = sorted.at(-1);
     setDays((list) => [
       ...list,
-      {
-        key: newKey("day"),
-        dayDate: last ? shiftDate(last.dayDate, 1) : "",
-        kind: "main",
-        recruit: "open",
-        gatherTime: last?.gatherTime ?? "",
-        startTime: last?.startTime ?? "",
-        endTime: last?.endTime ?? "",
-        positions: (last?.positions ?? []).map((p) => ({ ...p, id: undefined, key: newKey("pos") })),
-      },
+      last
+        ? { ...last, id: undefined, key: newKey(), dayDate: shiftDate(last.dayDate, 1), kind: "main" }
+        : { ...emptyEvent(rules).days[0], key: newKey() },
     ]);
   }
 
-  // 첫날 전날에 세팅일을 만든다 (대표 지정이 기본)
+  // 첫날 전날에 세팅일을 만든다 (기본 시급, 최소 4시간)
   function addSetupDay() {
     const first = sorted[0];
     setDays((list) => [
       ...list,
       {
-        key: newKey("day"),
+        key: newKey(),
         dayDate: first ? shiftDate(first.dayDate, -1) : "",
         kind: "setup",
-        recruit: "assign",
         gatherTime: "",
         startTime: "14:00",
         endTime: "18:00",
-        positions: [],
+        headcount: "1",
+        payType: "hourly",
+        rate: String(rules.defaultHourlyRate),
+        minPaidHours: SETUP_MIN_HOURS,
+        overtimeRate: "",
       },
     ]);
   }
@@ -252,20 +152,14 @@ export function EventForm({
       ...(d.id ? { id: d.id } : {}),
       dayDate: d.dayDate,
       kind: d.kind,
-      recruit: d.recruit,
       gatherTime: d.gatherTime,
       startTime: d.startTime,
       endTime: d.endTime,
-      positions: d.positions.map((p) => ({
-        ...(p.id ? { id: p.id } : {}),
-        roleId: p.roleId,
-        roleName: p.roleName,
-        payType: p.payType,
-        rate: p.rate.replace(/[^0-9]/g, "") || "x",
-        minPaidHours: p.minPaidHours,
-        overtimeRate: p.overtimeRate.replace(/[^0-9]/g, ""),
-        headcount: p.headcount,
-      })),
+      headcount: d.headcount,
+      payType: d.payType,
+      rate: digitsOnly(d.rate) || "x",
+      minPaidHours: d.minPaidHours,
+      overtimeRate: digitsOnly(d.overtimeRate),
     })),
   );
 
@@ -286,7 +180,7 @@ export function EventForm({
             </select>
           </Field>
           <Field id="title" text="제목 (회원에게 보임)" className="flex-[3_1_260px]">
-            <input id="title" name="title" required maxLength={80} defaultValue={initial.title} placeholder="예: 대기업 하반기 공채 필기시험 감독" className={field} />
+            <input id="title" name="title" required maxLength={80} defaultValue={initial.title} placeholder="예: 대기업 하반기 공채 필기시험" className={field} />
           </Field>
           <Field id="clientName" text="고객사 (회원에게 안 보임)" className="flex-[2_1_200px]">
             <input id="clientName" name="clientName" maxLength={60} defaultValue={initial.clientName} className={field} />
@@ -303,13 +197,23 @@ export function EventForm({
       </Section>
 
       <Section
-        title="날짜와 모집 역할"
-        hint="세팅일·진행일처럼 날짜마다 시간과 역할을 따로 정해요. '대표 지정'인 날은 회원 신청 화면에 나오지 않고, 일정 상세에서 대표가 직접 사람을 넣어요. 단가는 단가표에서 불러와 이 일정에서만 바꿀 수 있어요."
+        title="날짜와 모집 인원·단가"
+        hint={`세팅일·진행일처럼 날짜마다 시간, 모집 인원, 단가를 정해요. 회원은 날짜만 골라 신청하고, 역할은 신청자를 보고 일정 상세에서 사람마다 정해요. 새 날짜에는 기본 시급 ${formatWon(rules.defaultHourlyRate)}이 들어가요 (단가표 화면의 공통 계산 규칙에서 바꿀 수 있어요).`}
       >
         <ol className="flex flex-col gap-4">
           {sorted.map((d, index) => {
             const minutes = d.startTime && d.endTime ? scheduledMinutes(d.startTime, d.endTime) : 0;
-            const dayLocked = d.positions.some((p) => p.id && lockedPositionIds.includes(p.id));
+            const locked = d.id ? lockedDayIds.includes(d.id) : false;
+            const estimate = calculatePay(
+              {
+                payType: d.payType,
+                rate: Number(digitsOnly(d.rate)) || 0,
+                minPaidHours: d.minPaidHours === "" ? null : Number(d.minPaidHours),
+                overtimeRate: d.overtimeRate === "" ? null : Number(digitsOnly(d.overtimeRate)),
+              },
+              rules,
+              { scheduledMinutes: minutes, overtimeMinutes: 0 },
+            );
             return (
               <li key={d.key} className="flex flex-col gap-3 rounded-xl border border-field p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -317,14 +221,14 @@ export function EventForm({
                     {index + 1}일차
                     {d.dayDate && (
                       <span className="ml-2 font-normal text-body">
-                        {formatShortDate(d.dayDate)} {DAY_KIND_LABEL[d.kind]} · {DAY_RECRUIT_LABEL[d.recruit]}
+                        {formatShortDate(d.dayDate)} {DAY_KIND_LABEL[d.kind]}
                       </span>
                     )}
                   </h3>
                   <button
                     type="button"
-                    disabled={dayLocked || days.length === 1}
-                    title={dayLocked ? "신청자가 있어 뺄 수 없어요" : undefined}
+                    disabled={locked || days.length === 1}
+                    title={locked ? "신청이 있어 뺄 수 없어요" : undefined}
                     onClick={() => setDays((list) => list.filter((x) => x.key !== d.key))}
                     className="h-9 rounded-lg border border-field bg-white px-3 text-sm text-ink hover:bg-ground disabled:text-muted disabled:hover:bg-white"
                   >
@@ -344,12 +248,6 @@ export function EventForm({
                       ))}
                     </select>
                   </Field>
-                  <Field id={`${d.key}-recruit`} text="사람 정하는 방식" className="flex-[1_1_130px]">
-                    <select id={`${d.key}-recruit`} value={d.recruit} onChange={(e) => updateDay(d.key, { recruit: e.target.value as DayRecruit })} className={field}>
-                      <option value="open">공개 모집</option>
-                      <option value="assign">대표 지정</option>
-                    </select>
-                  </Field>
                   <Field id={`${d.key}-gather`} text="집합" className="flex-[1_1_110px]">
                     <input id={`${d.key}-gather`} type="time" value={d.gatherTime} onChange={(e) => updateDay(d.key, { gatherTime: e.target.value })} className={field} />
                   </Field>
@@ -360,99 +258,64 @@ export function EventForm({
                     <input id={`${d.key}-end`} type="time" required value={d.endTime} onChange={(e) => updateDay(d.key, { endTime: e.target.value })} className={field} />
                   </Field>
                 </div>
-
-                {d.positions.length === 0 && <p className="text-sm text-muted">이 날짜에 모집할 역할을 추가해 주세요.</p>}
-                <ul className="flex flex-col gap-3">
-                  {d.positions.map((p) => {
-                    const locked = p.id ? lockedPositionIds.includes(p.id) : false;
-                    const estimate = calculatePay(
-                      {
-                        payType: p.payType,
-                        rate: Number(p.rate.replace(/[^0-9]/g, "")) || 0,
-                        minPaidHours: p.minPaidHours === "" ? null : Number(p.minPaidHours),
-                        overtimeRate: p.overtimeRate === "" ? null : Number(p.overtimeRate.replace(/[^0-9]/g, "")),
-                      },
-                      rules,
-                      { scheduledMinutes: minutes, overtimeMinutes: 0 },
-                    );
-                    return (
-                      <li key={p.key} className="flex flex-col gap-3 rounded-lg bg-[#f8f9fa] p-3">
-                        <div className="flex flex-wrap items-end gap-3">
-                          <Field id={`${p.key}-name`} text="역할" className="flex-[2_1_140px]">
-                            <input id={`${p.key}-name`} value={p.roleName} maxLength={30} onChange={(e) => updatePosition(d.key, p.key, { roleName: e.target.value })} className={field} />
-                          </Field>
-                          <Field id={`${p.key}-type`} text="지급 방식" className="flex-[1_1_100px]">
-                            <select id={`${p.key}-type`} value={p.payType} onChange={(e) => updatePosition(d.key, p.key, { payType: e.target.value as PayType })} className={field}>
-                              <option value="hourly">{PAY_TYPE_LABEL.hourly}</option>
-                              <option value="daily">{PAY_TYPE_LABEL.daily}</option>
-                            </select>
-                          </Field>
-                          <Field id={`${p.key}-rate`} text={p.payType === "hourly" ? "1시간 단가" : "1회 단가"} className="flex-[1_1_120px]">
-                            <input id={`${p.key}-rate`} inputMode="numeric" value={p.rate} onChange={(e) => updatePosition(d.key, p.key, { rate: e.target.value })} className={`${field} text-right`} />
-                          </Field>
-                          {p.payType === "hourly" ? (
-                            <Field id={`${p.key}-min`} text="최소 보장(시간)" className="flex-[1_1_110px]">
-                              <input
-                                id={`${p.key}-min`}
-                                type="number"
-                                min={0}
-                                max={24}
-                                step={0.5}
-                                value={p.minPaidHours}
-                                placeholder={`공통 ${rules.defaultMinPaidHours}`}
-                                onChange={(e) => updatePosition(d.key, p.key, { minPaidHours: e.target.value })}
-                                className={`${field} text-right`}
-                              />
-                            </Field>
-                          ) : (
-                            <Field id={`${p.key}-ot`} text="초과 1시간당" className="flex-[1_1_110px]">
-                              <input id={`${p.key}-ot`} inputMode="numeric" value={p.overtimeRate} onChange={(e) => updatePosition(d.key, p.key, { overtimeRate: e.target.value })} className={`${field} text-right`} />
-                            </Field>
-                          )}
-                          <Field id={`${p.key}-count`} text="모집 인원" className="w-24">
-                            <input id={`${p.key}-count`} type="number" min={1} max={500} value={p.headcount} onChange={(e) => updatePosition(d.key, p.key, { headcount: e.target.value })} className={`${field} text-right`} />
-                          </Field>
-                          <button
-                            type="button"
-                            disabled={locked}
-                            title={locked ? "신청자가 있어 지울 수 없어요" : undefined}
-                            onClick={() => updateDay(d.key, { positions: d.positions.filter((x) => x.key !== p.key) })}
-                            className="h-11 rounded-lg border border-field bg-white px-3 text-sm font-bold text-ink hover:bg-ground disabled:text-muted disabled:hover:bg-white"
-                          >
-                            빼기
-                          </button>
-                        </div>
-                        <p className="text-[13px] text-muted">
-                          1인 예상 보수 (초과 없이): <strong className="text-ink">{formatWon(estimate.total)}</strong>
-                          {p.payType === "hourly" && minutes > 0 && ` · ${minutes / 60}시간${estimate.minimumApplied ? ", 최소 보장 적용" : ""}`}
-                          {locked && " · 신청자가 있어 뺄 수 없어요"}
-                        </p>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <div className="flex flex-wrap items-center gap-2">
-                  <label htmlFor={`${d.key}-add-role`} className="text-sm font-bold">
-                    역할 추가
-                  </label>
-                  <select
-                    id={`${d.key}-add-role`}
-                    value=""
-                    onChange={(e) => {
-                      addRole(d.key, e.target.value);
-                      e.target.value = "";
-                    }}
-                    className="h-11 rounded-lg border border-field bg-white px-3 text-sm"
-                  >
-                    <option value="">단가표에서 고르기…</option>
-                    {roles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name} ({PAY_TYPE_LABEL[r.pay_type]} {formatWon(r.default_rate)})
-                      </option>
-                    ))}
-                    <option value="custom">직접 입력</option>
-                  </select>
+                <div className="flex flex-wrap items-end gap-3 rounded-lg bg-[#f8f9fa] p-3">
+                  <Field id={`${d.key}-count`} text="모집 인원" className="w-24">
+                    <input id={`${d.key}-count`} type="number" min={1} max={500} value={d.headcount} onChange={(e) => updateDay(d.key, { headcount: e.target.value })} className={`${field} text-right`} />
+                  </Field>
+                  <Field id={`${d.key}-type`} text="지급 방식" className="flex-[1_1_100px]">
+                    <select id={`${d.key}-type`} value={d.payType} onChange={(e) => updateDay(d.key, { payType: e.target.value as PayType })} className={field}>
+                      <option value="hourly">{PAY_TYPE_LABEL.hourly}</option>
+                      <option value="daily">{PAY_TYPE_LABEL.daily}</option>
+                    </select>
+                  </Field>
+                  <Field id={`${d.key}-rate`} text={d.payType === "hourly" ? "1시간 단가" : "1회 단가"} className="flex-[1_1_120px]">
+                    <input id={`${d.key}-rate`} inputMode="numeric" value={d.rate} onChange={(e) => updateDay(d.key, { rate: e.target.value })} className={`${field} text-right`} />
+                  </Field>
+                  {d.payType === "hourly" ? (
+                    <Field id={`${d.key}-min`} text="최소 보장(시간)" className="flex-[1_1_110px]">
+                      <input
+                        id={`${d.key}-min`}
+                        type="number"
+                        min={0}
+                        max={24}
+                        step={0.5}
+                        value={d.minPaidHours}
+                        placeholder={`공통 ${rules.defaultMinPaidHours}`}
+                        onChange={(e) => updateDay(d.key, { minPaidHours: e.target.value })}
+                        className={`${field} text-right`}
+                      />
+                    </Field>
+                  ) : (
+                    <Field id={`${d.key}-ot`} text="초과 1시간당" className="flex-[1_1_110px]">
+                      <input id={`${d.key}-ot`} inputMode="numeric" value={d.overtimeRate} onChange={(e) => updateDay(d.key, { overtimeRate: e.target.value })} className={`${field} text-right`} />
+                    </Field>
+                  )}
+                  {roles.length > 0 && (
+                    <Field id={`${d.key}-load`} text="단가표에서 불러오기" className="flex-[1_1_160px]">
+                      <select
+                        id={`${d.key}-load`}
+                        value=""
+                        onChange={(e) => {
+                          loadRole(d.key, e.target.value);
+                          e.target.value = "";
+                        }}
+                        className={field}
+                      >
+                        <option value="">고르기…</option>
+                        {roles.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name} ({PAY_TYPE_LABEL[r.pay_type]} {formatWon(r.default_rate)})
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  )}
                 </div>
+                <p className="text-[13px] text-muted">
+                  1인 예상 보수 (초과 없이): <strong className="text-ink">{formatWon(estimate.total)}</strong>
+                  {d.payType === "hourly" && minutes > 0 && ` · ${minutes / 60}시간${estimate.minimumApplied ? ", 최소 보장 적용" : ""}`}
+                  {locked && " · 신청이 있어 뺄 수 없어요"}
+                </p>
               </li>
             );
           })}
@@ -465,12 +328,12 @@ export function EventForm({
             + 세팅일 추가 (첫날 전날)
           </button>
         </div>
-        {openDays > 1 && (
+        {multiDay && (
           <label className="flex cursor-pointer items-start gap-2 rounded-lg bg-ground p-3">
             <input type="checkbox" name="allDaysRequired" checked={allDaysRequired} onChange={(e) => setAllDaysRequired(e.target.checked)} className="mt-0.5 h-5 w-5 accent-brand" />
             <span className="flex flex-col">
               <span className="font-bold">모든 날짜 참여 필수</span>
-              <span className="text-[13px] text-muted">켜면 회원은 공개 모집 날짜를 모두 함께 신청해야 해요. 끄면 가능한 날짜만 골라 신청해요.</span>
+              <span className="text-[13px] text-muted">켜면 회원은 모든 날짜를 함께 신청해야 해요. 끄면 가능한 날짜만 골라 신청해요.</span>
             </span>
           </label>
         )}

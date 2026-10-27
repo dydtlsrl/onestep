@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 문서 버전 | v0.1 (초안) |
-| 최종 수정 | 2026-10-27 (2단계 일정·신청, 여러 날짜 일정 반영) |
+| 최종 수정 | 2026-10-27 (2단계: 여러 날짜 일정, 날짜만 골라 신청, 역할·단가는 사람마다) |
 | 데이터베이스 | PostgreSQL (Supabase) |
 | 관련 문서 | [PRD](./PRD.md) · [기술 스택](./TECH_STACK.md) |
 
@@ -18,12 +18,9 @@ erDiagram
     events ||--|| event_internal : "내부 정보 (고객사·메모)"
     events ||--o| event_chat_links : "확정자 톡방"
     events ||--|{ event_days : "날짜 (세팅일·진행일)"
-    event_days ||--|{ event_positions : "날짜별 모집 역할"
     events ||--o{ event_extra_rules : "추가 지급 기본값"
-    job_roles ||--o{ event_positions : "단가표 참조"
     events ||--o{ applications : "신청 받음"
     event_days ||--o{ applications : "날짜별 신청"
-    event_positions ||--o{ applications : "역할 선택"
     profiles ||--o{ applications : "신청함"
     applications ||--o| contracts : "계약"
     contract_templates ||--o{ contracts : "양식"
@@ -35,6 +32,7 @@ erDiagram
         uuid id PK "로그인 계정 ID"
         text name "이름"
         text phone UK "휴대폰 번호"
+        int default_rate "회원 기본 시급 (대표가 정함, 비면 일정 단가)"
         text gender "성별 (SET-08을 켤 때 추가)"
         text region "활동 가능 지역"
         int career_years "경력 연수"
@@ -142,32 +140,23 @@ erDiagram
         uuid event_id FK
         date day_date "날짜"
         enum kind "setup, main, other (세팅·진행·기타)"
-        enum recruit "open, assign (공개 모집·대표 지정)"
         time gather_time "집합 시간"
         time start_time "근무 시작"
         time end_time "근무 종료"
         int sort_order "표시 순서"
-    }
-
-    event_positions {
-        uuid id PK
-        uuid event_id FK
-        uuid day_id FK "날짜"
-        uuid role_id FK "단가표 역할"
-        text role_name "등록 당시 역할 이름"
+        int headcount "모집 인원"
         enum pay_type "hourly, daily"
-        int rate "이 일정의 단가 (원)"
+        int rate "이 날의 단가 (원, 처음 값은 기본 시급)"
         numeric min_paid_hours "시급 최소 보장 시간"
         int overtime_rate "일급 초과 1시간당 금액"
-        int headcount "모집 인원"
-        int sort_order "표시 순서"
     }
 
     applications {
         uuid id PK
         uuid event_id FK
         uuid day_id FK "날짜 (날짜마다 한 줄)"
-        uuid position_id FK "신청 역할"
+        text role_name "대표가 정한 역할 (비면 미정)"
+        int rate_override "이 일정에서 이 사람만 다른 단가"
         uuid member_id FK
         enum status "applied, waitlisted, selected, rejected, cancelled"
         boolean added_by_admin "대표가 직접 추가"
@@ -287,7 +276,7 @@ erDiagram
 
 | 테이블 | 저장하는 값 | 이유 |
 |---|---|---|
-| `event_positions` | `role_name`, `rate` (날짜별) | 단가표를 바꿔도 지난 일정 단가는 그대로 |
+| `event_days` | `rate`, `pay_type` 등 (날짜별) | 단가표·기본 시급을 바꿔도 지난 일정 단가는 그대로 |
 | `event_extra_rules` | `amount` | 지방비 기본표를 바꿔도 이미 등록한 일정의 금액은 그대로 |
 | `payment_extras` | `amount`, `source` | 일정의 기본값을 나중에 바꿔도 이미 만든 지급 항목은 그대로. 자동으로 붙은 것인지 대표가 넣은 것인지 구분 |
 | `contracts` | `body_snapshot`, `document_hash` | 양식을 고쳐도 서명한 계약서 내용은 그대로, 위·변조 확인 가능 |
@@ -323,9 +312,8 @@ erDiagram
 | `event_internal` | 전체 | **불가** | 불가 |
 | `event_chat_links` | 전체 | 확정되고 **결과 알림을 받은** 일정의 것만 읽기. 활동 제한·탈퇴하면 못 봄 | 불가 |
 | `event_days` | 전체 | 볼 수 있는 일정의 것만 읽기 | 같음 |
-| `event_positions` | 전체 | 볼 수 있는 일정의 것만 읽기 | 같음 |
 | `event_extra_rules` | 전체 | 볼 수 있는 일정의 것만 읽기 (화면에는 자기 등급 금액만) | 같음 |
-| `applications` | 전체 | 자기 신청 읽기. 신청·취소는 함수로만 | 불가 (역할별 확정 인원만 `position_selected_counts`로 공개) |
+| `applications` | 전체 | 자기 신청 읽기. 신청·취소는 함수로만 | 불가 (날짜별 확정 인원만 `day_selected_counts`로 공개) |
 | `contract_templates` | 전체 | 불가 | 불가 |
 | `contracts` | 전체 | 자기 계약 읽기·서명 | 불가 |
 | `payments` | 전체 | 자기 내역 읽기 | 불가 |
@@ -366,18 +354,23 @@ erDiagram
 ## 5. DB 함수 (2단계: 일정·신청)
 일정과 신청도 테이블을 직접 고치지 않고 아래 함수로만 바꾼다. 알림(`notifications`)도 함수 안에서 같이 만든다.
 
-여러 날짜 일정(`20261031000000_event_days.sql`)부터 아래 형식을 쓴다.
+날짜만 골라 신청하는 방식(`20261102000000_day_signup.sql`)부터 아래 형식을 쓴다.
+
+**단가 정하는 순서** (화면·정산 공통, `src/lib/pay.ts`의 `effectiveRate`): ① 이 일정에서 이 사람만 정한 단가(`applications.rate_override`) → ② 시급인 날이면 회원 기본 시급(`profiles.default_rate`)과 날짜 단가 중 높은 쪽 → ③ 날짜 단가(`event_days.rate`). 새 날짜의 처음 단가는 공통 계산 규칙의 기본 시급(처음 11,000원)이다.
 
 | 함수 | 누가 | 하는 일 |
 |---|---|---|
-| `create_event(event, days, extras, client_name, memo)` | 대표 | 임시저장 일정 생성. `days`에 날짜별 시간·종류·모집 방식과 역할을 넣는다. 역할은 단가표 값을 복사해 저장. 첫날·마지막 날은 날짜 목록에서 계산 |
-| `update_event(id, event, days, extras, ...)` | 대표 | 일정 수정. 신청자가 있는 날짜·역할은 뺄 수 없음(`POSITION_IN_USE`), 역할을 다른 날짜로 옮길 수 없음, 완료·취소 일정은 수정 불가(`EVENT_LOCKED`) |
+| `create_event(event, days, extras, client_name, memo)` | 대표 | 임시저장 일정 생성. `days`에 날짜별 종류·시간·모집 인원·단가를 넣는다. 첫날·마지막 날은 날짜 목록에서 계산 |
+| `update_event(id, event, days, extras, ...)` | 대표 | 일정 수정. 신청이 있는 날짜는 뺄 수 없음(`DAY_IN_USE`), 완료·취소 일정은 수정 불가(`EVENT_LOCKED`) |
 | `set_event_status(id, status, reason)` | 대표 | 공개·마감·완료·취소. 처음 공개할 때 볼 수 있는 회원에게 알림, 취소는 사유 필수이며 신청자에게 알림 |
-| `apply_to_event(event_id, position_ids[])` | 활동 회원 | 공개 모집 날짜마다 역할 하나씩 골라 신청. 공개 범위·마감 시각 확인, 한 일정에 한 번(`ALREADY_APPLIED_EVENT`), "모든 날짜 참여 필수"면 모두 골라야 함(`ALL_DAYS_REQUIRED`). 취소했던 신청은 다시 낼 수 있음 |
+| `apply_to_event(event_id, day_ids[])` | 활동 회원 | 참여할 날짜만 골라 신청 (역할은 고르지 않음). 공개 범위·마감 시각 확인, 한 일정에 한 번(`ALREADY_APPLIED_EVENT`), "모든 날짜 참여 필수"면 모두 골라야 함(`ALL_DAYS_REQUIRED`). 취소했던 신청은 다시 낼 수 있음 |
 | `cancel_application(event_id, reason)` | 활동 회원 | 이 일정의 확정 전 신청(모든 날짜) 취소. 확정된 날짜가 있으면 `ASK_ADMIN` (PRD SET-06 ①) |
 | `decide_applications(ids, status)` | 대표 | 여러 신청(날짜별)을 한 번에 확정·대기·미선발·처리 전으로. 확정이 풀리면 그 날의 출석·초과 시간과 자동 기록을 지움 |
-| `add_member_to_event(event_id, position_id, member_id)` | 대표 | 신청하지 않은 회원을 그 역할의 날짜에 확정자로 직접 추가 (대표 지정 날짜 포함) |
+| `add_member_to_event(event_id, day_id, member_id)` | 대표 | 신청하지 않은 회원을 그 날짜의 확정자로 직접 추가 |
+| `set_application_detail(application_id, role_name, rate_override)` | 대표 | 신청자(날짜별)의 역할 이름과 이 사람만 다른 단가. 비우면 역할 미정·기본 단가 |
+| `set_member_rate(member_id, rate)` | 대표 | 회원 기본 시급. 비우면 일정 단가를 씀 |
 | `notify_selection_results(event_id)` | 대표 | 확정·미선발이 바뀐 사람에게만 한 번씩 결과 알림. 확정된 날짜·역할을 모아 적음. 다시 눌러도 같은 알림은 안 보냄 |
 | `set_attendance(application_id, attendance, overtime_minutes)` | 대표 | 날짜별 출석·초과 시간 저장. 노쇼·지각은 관리자 기록에 자동으로 남기고(날짜 이름 포함), 바꾸면 자동 기록도 바뀜 |
-| `position_selected_counts(event_ids)` | 활동 회원 | 볼 수 있는 일정의 역할별 확정 인원 (남은 자리 표시) |
+| `day_selected_counts(event_ids)` | 활동 회원 | 볼 수 있는 일정의 날짜별 확정 인원 (남은 자리 표시) |
+| `update_pay_rules(..., default_hourly_rate)` | 대표 | 공통 계산 규칙에 기본 시급 추가. 비우면 지금 값 유지 |
 | `can_view_event(id, status)` | 권한 규칙 안에서 | 위의 일정 공개 규칙 |

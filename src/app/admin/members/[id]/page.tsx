@@ -6,6 +6,8 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { NOTE_TYPE_LABEL, STATUS_LABEL, type NoteType } from "@/lib/members";
 import { formatPhone } from "@/lib/phone";
 import { MemberControls } from "./member-controls";
+import { MemberRateForm } from "./member-rate-form";
+import { parsePayRules } from "@/lib/pay";
 import { DeleteNoteButton, NoteForm } from "./note-form";
 
 interface MemberDetail {
@@ -20,6 +22,7 @@ interface MemberDetail {
   status: MemberStatus;
   tier: MemberTier;
   status_reason: string;
+  default_rate: number | null;
   created_at: string;
   approved_at: string | null;
   invites: { memo: string } | null;
@@ -56,11 +59,11 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
   if (!z.uuid().safeParse(id).success) notFound();
 
   const { supabase } = await requireAdmin();
-  const [{ data: member }, { data: notes }] = await Promise.all([
+  const [{ data: member }, { data: notes }, { data: setting }] = await Promise.all([
     supabase
       .from("profiles")
       .select(
-        "id, name, phone, region, career_years, career_note, referrer_name, role, status, tier, status_reason, created_at, approved_at, invites(memo)",
+        "id, name, phone, region, career_years, career_note, referrer_name, role, status, tier, status_reason, default_rate, created_at, approved_at, invites(memo)",
       )
       .eq("id", id)
       .maybeSingle<MemberDetail>(),
@@ -70,6 +73,7 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
       .eq("member_id", id)
       .order("created_at", { ascending: false })
       .returns<NoteRow[]>(),
+    supabase.from("app_settings").select("value").eq("key", "pay_rules").maybeSingle<{ value: unknown }>(),
   ]);
 
   if (!member) notFound();
@@ -153,6 +157,11 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
                 statusReason={member.status_reason}
                 isAdmin={member.role === "admin"}
               />
+            )}
+            {member.role === "member" && (member.status === "active" || member.status === "restricted") && (
+              <div className="border-t border-line pt-4">
+                <MemberRateForm memberId={member.id} rate={member.default_rate} defaultHourlyRate={parsePayRules(setting?.value).defaultHourlyRate} />
+              </div>
             )}
           </Section>
         </div>

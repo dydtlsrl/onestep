@@ -104,6 +104,7 @@ const rulesSchema = z.object({
   unitMinutes: z.coerce.number().refine((v) => [10, 15, 30, 60].includes(v), "계산 단위를 골라 주세요."),
   rounding: z.enum(["floor", "ceil", "round"], { error: "단위 미만 처리를 골라 주세요." }),
   minHours: z.coerce.number({ error: "최소 보장 시간은 숫자로 적어 주세요." }).min(0).max(12, "12시간 이하로 적어 주세요."),
+  hourlyRate: z.coerce.number({ error: "기본 시급은 숫자로 적어 주세요." }).int().min(0).max(1_000_000, "기본 시급이 너무 커요."),
   reason: z.string().trim().max(200, "변경 사유는 200자까지 쓸 수 있어요."),
 });
 
@@ -114,6 +115,7 @@ export async function updatePayRules(_prev: RateState, formData: FormData): Prom
     unitMinutes: formData.get("unitMinutes"),
     rounding: formData.get("rounding"),
     minHours: formData.get("minHours") || "0",
+    hourlyRate: String(formData.get("hourlyRate") ?? "").replace(/[^0-9]/g, "") || "11000",
     reason: formData.get("reason") ?? "",
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "입력한 내용을 확인해 주세요." };
@@ -125,6 +127,7 @@ export async function updatePayRules(_prev: RateState, formData: FormData): Prom
     p_overtime_rounding: parsed.data.rounding,
     p_default_min_paid_hours: parsed.data.minHours,
     p_reason: parsed.data.reason,
+    p_default_hourly_rate: parsed.data.hourlyRate,
   });
   if (error) return { error: messageForError(error) };
 

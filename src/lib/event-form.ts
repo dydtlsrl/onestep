@@ -8,27 +8,20 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "날짜를 골라 주세요
 const money = (label: string) =>
   z.coerce.number({ error: `${label}은(는) 숫자로 적어 주세요.` }).int().min(0).max(10_000_000, `${label}이(가) 너무 커요.`);
 
-const positionSchema = z.object({
-  id: z.uuid().optional(),
-  roleId: z.uuid().nullable().optional(),
-  roleName: z.string().trim().min(1, "역할 이름을 적어 주세요.").max(30, "역할 이름은 30자까지예요."),
-  payType: z.enum(["hourly", "daily"]),
-  rate: money("단가"),
-  minPaidHours: z.union([z.literal(""), z.null(), z.coerce.number().min(0).max(24)]).optional(),
-  overtimeRate: z.union([z.literal(""), z.null(), money("초과 금액")]).optional(),
-  headcount: z.coerce.number({ error: "모집 인원을 숫자로 적어 주세요." }).int().min(1, "모집 인원은 1명 이상이에요.").max(500),
-});
-
+// 날짜 하나: 종류, 시간, 모집 인원, 단가. 역할은 신청자를 보고 대표가 나중에 사람마다 정한다.
 const daySchema = z
   .object({
     id: z.uuid().optional(),
     dayDate: date,
     kind: z.enum(["setup", "main", "other"]),
-    recruit: z.enum(["open", "assign"]),
     gatherTime: optionalTime,
     startTime: time,
     endTime: time,
-    positions: z.array(positionSchema).min(1, "날짜마다 모집 역할을 하나 이상 넣어 주세요.").max(20),
+    headcount: z.coerce.number({ error: "모집 인원을 숫자로 적어 주세요." }).int().min(1, "모집 인원은 1명 이상이에요.").max(500),
+    payType: z.enum(["hourly", "daily"]),
+    rate: money("단가"),
+    minPaidHours: z.union([z.literal(""), z.null(), z.coerce.number().min(0).max(24)]).optional(),
+    overtimeRate: z.union([z.literal(""), z.null(), money("초과 금액")]).optional(),
   })
   .refine((d) => d.endTime > d.startTime, { message: "끝나는 시간이 시작 시간보다 늦어야 해요.", path: ["endTime"] })
   .refine((d) => !d.gatherTime || d.gatherTime <= d.startTime, {
@@ -111,27 +104,21 @@ export function toEventRpcArgs(v: EventFormInput) {
     chat_link: v.chatLink,
     apply_deadline: kstLocalToIso(v.applyDeadline) ?? "",
     pay_date: v.payDate,
-    // 공개 모집 날짜가 둘 이상일 때만 의미가 있다
-    all_days_required: v.allDaysRequired && v.days.filter((d) => d.recruit === "open").length > 1,
+    // 날짜가 둘 이상일 때만 의미가 있다
+    all_days_required: v.allDaysRequired && v.days.length > 1,
   };
   const days = v.days.map((d) => ({
     ...(d.id ? { id: d.id } : {}),
     day_date: d.dayDate,
     kind: d.kind,
-    recruit: d.recruit,
     gather_time: d.gatherTime,
     start_time: d.startTime,
     end_time: d.endTime,
-    positions: d.positions.map((p) => ({
-      ...(p.id ? { id: p.id } : {}),
-      role_id: p.roleId ?? null,
-      role_name: p.roleName,
-      pay_type: p.payType,
-      rate: p.rate,
-      min_paid_hours: p.payType === "hourly" && p.minPaidHours !== "" && p.minPaidHours != null ? p.minPaidHours : null,
-      overtime_rate: p.payType === "daily" && p.overtimeRate !== "" && p.overtimeRate != null ? p.overtimeRate : null,
-      headcount: p.headcount,
-    })),
+    headcount: d.headcount,
+    pay_type: d.payType,
+    rate: d.rate,
+    min_paid_hours: d.payType === "hourly" && d.minPaidHours !== "" && d.minPaidHours != null ? d.minPaidHours : null,
+    overtime_rate: d.payType === "daily" && d.overtimeRate !== "" && d.overtimeRate != null ? d.overtimeRate : null,
   }));
   const extras = [
     ...(v.transportOn && v.transportAmount > 0 ? [{ type: "transport", tier: "all", amount: v.transportAmount, per_day: v.transportPerDay }] : []),

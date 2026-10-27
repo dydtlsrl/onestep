@@ -9,7 +9,6 @@ export type Attendance = "unknown" | "attended" | "late" | "no_show";
 export type ExtraPayType = "transport" | "regional";
 export type ExtraTier = "all" | "core" | "general";
 export type DayKind = "setup" | "main" | "other";
-export type DayRecruit = "open" | "assign";
 
 export interface EventRow {
   id: string;
@@ -30,41 +29,30 @@ export interface EventRow {
 export const EVENT_COLUMNS =
   "id, type, title, start_date, end_date, all_days_required, location_name, address, notice, status, apply_deadline, pay_date, cancel_reason";
 
-// 일정 안의 날짜(일차). 날짜마다 시간과 모집 역할이 따로다.
+// 일정 안의 날짜(일차). 날짜마다 시간, 모집 인원, 단가가 따로다.
 export interface DayRow {
   id: string;
   event_id: string;
   day_date: string;
   kind: DayKind;
-  recruit: DayRecruit;
   gather_time: string | null; // HH:MM:SS
   start_time: string;
   end_time: string;
   sort_order: number;
-}
-
-export const DAY_COLUMNS = "id, event_id, day_date, kind, recruit, gather_time, start_time, end_time, sort_order";
-
-export interface PositionRow {
-  id: string;
-  event_id: string;
-  day_id: string;
-  role_id: string | null;
-  role_name: string;
+  headcount: number;
   pay_type: PayType;
   rate: number;
   min_paid_hours: number | null;
   overtime_rate: number | null;
-  headcount: number;
-  sort_order: number;
 }
 
-export const POSITION_COLUMNS = "id, event_id, day_id, role_id, role_name, pay_type, rate, min_paid_hours, overtime_rate, headcount, sort_order";
+export const DAY_COLUMNS =
+  "id, event_id, day_date, kind, gather_time, start_time, end_time, sort_order, headcount, pay_type, rate, min_paid_hours, overtime_rate";
 
-// position_selected_counts 함수가 돌려주는 역할별 확정 인원
+// day_selected_counts 함수가 돌려주는 날짜별 확정 인원
 export interface SelectedCount {
   event_id: string;
-  position_id: string;
+  day_id: string;
   selected_count: number;
 }
 
@@ -85,7 +73,6 @@ export const EVENT_TYPE_LABEL: Record<EventType, string> = {
 };
 
 export const DAY_KIND_LABEL: Record<DayKind, string> = { setup: "세팅", main: "진행", other: "기타" };
-export const DAY_RECRUIT_LABEL: Record<DayRecruit, string> = { open: "공개 모집", assign: "대표 지정" };
 export const EXTRA_TYPE_LABEL: Record<ExtraPayType, string> = { transport: "교통비", regional: "지방비" };
 
 export const EVENT_STATUS_LABEL: Record<EventStatus, string> = {
@@ -172,12 +159,12 @@ export function suggestPayDate(eventDate: string, graceDays = 7): string {
   return toDateString(new Date(Date.UTC(y, m + 1, 15)));
 }
 
-export function toRoleRate(position: Pick<PositionRow, "pay_type" | "rate" | "min_paid_hours" | "overtime_rate">): RoleRate {
+export function toRoleRate(day: Pick<DayRow, "pay_type" | "rate" | "min_paid_hours" | "overtime_rate">): RoleRate {
   return {
-    payType: position.pay_type,
-    rate: position.rate,
-    minPaidHours: position.min_paid_hours === null ? null : Number(position.min_paid_hours),
-    overtimeRate: position.overtime_rate,
+    payType: day.pay_type,
+    rate: day.rate,
+    minPaidHours: day.min_paid_hours === null ? null : Number(day.min_paid_hours),
+    overtimeRate: day.overtime_rate,
   };
 }
 

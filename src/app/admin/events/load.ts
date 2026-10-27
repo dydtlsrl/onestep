@@ -1,7 +1,7 @@
 // 일정 폼에 필요한 단가표와 계산 규칙을 불러온다
 import type { requireAdmin } from "@/lib/auth";
 import { parsePayRules } from "@/lib/pay";
-import type { RoleOption } from "./event-form";
+import type { RoleOption } from "./event-form-values";
 
 type Supabase = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
 

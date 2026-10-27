@@ -14,7 +14,6 @@ import {
   visibleApplicationStatus,
   type ApplicationStatus,
   type DayKind,
-  type DayRecruit,
   type EventStatus,
   type SelectedCount,
 } from "@/lib/events";
@@ -26,7 +25,7 @@ interface HomeDay {
   id: string;
   day_date: string;
   kind: DayKind;
-  recruit: DayRecruit;
+  headcount: number;
   gather_time: string | null;
   start_time: string;
   end_time: string;
@@ -41,7 +40,6 @@ interface HomeEvent {
   status: EventStatus;
   apply_deadline: string | null;
   event_days: HomeDay[];
-  event_positions: { id: string; day_id: string; headcount: number }[];
 }
 
 interface HomeApplication {
@@ -60,7 +58,7 @@ async function loadHome(supabase: Supabase, userId: string) {
   const { data } = await supabase
     .from("events")
     .select(
-      "id, title, start_date, end_date, location_name, status, apply_deadline, event_days(id, day_date, kind, recruit, gather_time, start_time, end_time), event_positions(id, day_id, headcount)",
+      "id, title, start_date, end_date, location_name, status, apply_deadline, event_days(id, day_date, kind, headcount, gather_time, start_time, end_time)",
     )
     .gte("end_date", todayKst(now))
     .in("status", ["open_core", "open_all", "closed", "cancelled"])
@@ -73,36 +71,29 @@ async function loadHome(supabase: Supabase, userId: string) {
 
   const [{ data: apps }, { data: counts }, { data: chats }] = await Promise.all([
     supabase.from("applications").select("event_id, day_id, status, notified_status").eq("member_id", userId).in("event_id", ids).returns<HomeApplication[]>(),
-    supabase.rpc("position_selected_counts", { p_event_ids: ids }),
+    supabase.rpc("day_selected_counts", { p_event_ids: ids }),
     supabase.from("event_chat_links").select("event_id, chat_link").in("event_id", ids).returns<{ event_id: string; chat_link: string }[]>(),
   ]);
   const chatOf = new Map((chats ?? []).map((c) => [c.event_id, c.chat_link]));
-  const selectedOf = new Map(((counts ?? []) as SelectedCount[]).map((c) => [c.position_id, c.selected_count]));
+  const selectedOf = new Map(((counts ?? []) as SelectedCount[]).map((c) => [c.day_id, c.selected_count]));
 
   const rows = events.map((e) => {
     const days = [...e.event_days].sort((a, b) => a.day_date.localeCompare(b.day_date) || a.start_time.localeCompare(b.start_time));
     const mine = (apps ?? []).filter((a) => a.event_id === e.id).map((a) => ({ dayId: a.day_id, shown: visibleApplicationStatus(a.status, a.notified_status) }));
     const myStatus = STATUS_ORDER.find((s) => mine.some((a) => a.shown === s)) ?? null;
-    const openDayIds = new Set(days.filter((d) => d.recruit === "open").map((d) => d.id));
     return {
       ...e,
       days,
-      hasOpenDay: openDayIds.size > 0,
       myStatus,
       selectedDays: days.filter((d) => mine.some((a) => a.dayId === d.id && a.shown === "selected")),
       chatLink: chatOf.get(e.id) ?? "",
-      remaining: e.event_positions
-        .filter((p) => openDayIds.has(p.day_id))
-        .reduce((sum, p) => sum + Math.max(0, p.headcount - (selectedOf.get(p.id) ?? 0)), 0),
+      remaining: days.reduce((sum, d) => sum + Math.max(0, d.headcount - (selectedOf.get(d.id) ?? 0)), 0),
       deadlinePassed: e.apply_deadline !== null && new Date(e.apply_deadline).getTime() <= now,
     };
   });
   return {
     mine: rows.filter((e) => e.myStatus !== null && e.myStatus !== "cancelled"),
-    // 대표 지정 날짜만 있는 일정은 신청할 것이 없으니 빼고, 내가 아직 공개 모집 날짜에 신청하지 않은 일정만
-    open: rows.filter(
-      (e) => (e.status === "open_core" || e.status === "open_all") && e.hasOpenDay && (e.myStatus === null || e.myStatus === "cancelled"),
-    ),
+    open: rows.filter((e) => (e.status === "open_core" || e.status === "open_all") && (e.myStatus === null || e.myStatus === "cancelled")),
   };
 }
 
@@ -141,7 +132,6 @@ function EventCard({ event, children }: { event: HomeRow; children?: React.React
               {event.days.slice(0, 4).map((d) => (
                 <li key={d.id}>
                   <span className="font-bold">{dayLabel(d)}</span> {dayTime(d)}
-                  {d.recruit === "assign" && <span className="text-muted"> · 대표 지정</span>}
                 </li>
               ))}
               {event.days.length > 4 && <li className="text-muted">외 {event.days.length - 4}일</li>}

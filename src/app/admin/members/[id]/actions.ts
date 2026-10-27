@@ -32,6 +32,22 @@ export async function setTier(_prev: MemberActionState, formData: FormData): Pro
   return { ok: "등급을 저장했어요." };
 }
 
+// 회원 기본 시급. 비우면 일정의 단가를 그대로 쓴다.
+export async function setMemberRate(_prev: MemberActionState, formData: FormData): Promise<MemberActionState> {
+  const id = memberId.safeParse(formData.get("memberId"));
+  if (!id.success) return { error: "잘못된 요청이에요." };
+  const raw = String(formData.get("rate") ?? "").replace(/[^0-9]/g, "");
+  const rate = raw === "" ? null : Number(raw);
+  if (rate !== null && rate > 10_000_000) return { error: "시급이 너무 커요." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_member_rate", { p_member_id: id.data, p_rate: rate });
+  if (error) return { error: messageForError(error) };
+
+  refresh(id.data);
+  return { ok: rate === null ? "기본 시급을 비웠어요. 일정 단가를 써요." : "기본 시급을 저장했어요." };
+}
+
 export async function restrictMember(_prev: MemberActionState, formData: FormData): Promise<MemberActionState> {
   const id = memberId.safeParse(formData.get("memberId"));
   if (!id.success) return { error: "잘못된 요청이에요." };

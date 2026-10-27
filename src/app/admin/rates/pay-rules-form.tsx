@@ -16,6 +16,19 @@ export function PayRulesForm({ rules }: { rules: PayRules }) {
     <form action={action} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-[1_1_150px] flex-col gap-1.5">
+          <label htmlFor="hourlyRate" className="text-sm font-bold">
+            기본 시급 (원)
+          </label>
+          <input
+            id="hourlyRate"
+            name="hourlyRate"
+            inputMode="numeric"
+            required
+            defaultValue={rules.defaultHourlyRate}
+            className={`${fieldClass} text-right`}
+          />
+        </div>
+        <div className="flex flex-[1_1_150px] flex-col gap-1.5">
           <label htmlFor="multiplier" className="text-sm font-bold">
             초과 시간 배율 (시급)
           </label>
@@ -71,6 +84,7 @@ export function PayRulesForm({ rules }: { rules: PayRules }) {
         </div>
       </div>
       <p className="text-[13px] leading-relaxed text-muted">
+        기본 시급은 새 일정의 날짜를 만들 때 처음 들어가는 단가예요 (예: 11,000원이면 세팅 4시간 44,000원, 8시간 88,000원). 일정마다 바꿀 수 있어요.
         예: 1시간 단위·버림이면 1시간 40분 초과는 1시간, 올림이면 2시간으로 계산해요. 최소 보장 시간은 시급 역할에만
         적용되고, 역할마다 따로 정할 수도 있어요. 0이면 보장 시간이 없어요.
       </p>
