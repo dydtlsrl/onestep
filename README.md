@@ -53,7 +53,9 @@ npm install
 
 ### 3. Supabase 프로젝트 만들기
 1. [supabase.com](https://supabase.com)에서 New project를 누른다. 지역(Region)은 **Northeast Asia (Seoul)** 를 고른다.
-2. Project Settings > API에서 **Project URL**과 **Publishable key**를 확인한다.
+2. 두 값을 확인한다.
+   - **Project URL**: `https://<Project ID>.supabase.co`. Project ID는 Settings > General에 있다. 화면 위쪽 **Connect** 버튼을 눌러도 주소가 나온다.
+   - **Publishable key**: Settings > **API Keys**에 있는 `sb_publishable_`로 시작하는 키
 3. 이 폴더에서 `.env.example`을 복사해 `.env.local`을 만들고 두 값을 채운다.
    ```bash
    cp .env.example .env.local
