@@ -124,6 +124,14 @@ select tests.expect_count('select * from public.event_chat_links', 1, '확정자
 select tests.expect_error(format('select public.cancel_application(%L)', :'ev'), 'ASK_ADMIN');
 reset role;
 
+-- 확정 알림을 받은 뒤 활동 제한되면 톡방 링크도 못 본다
+update public.profiles set status = 'restricted' where id = '00000000-0000-0000-0000-00000000004b';
+select tests.act_as('00000000-0000-0000-0000-00000000004b');
+set role authenticated;
+select tests.expect_count('select * from public.event_chat_links', 0, '제한된 확정자: 톡방 링크가 안 보임');
+reset role;
+update public.profiles set status = 'active' where id = '00000000-0000-0000-0000-00000000004b';
+
 
 -- 4. 출석: 날짜별 기록 -------------------------------------------------------------------------
 
@@ -171,5 +179,34 @@ select tests.expect_count(format($$select 1 from public.event_days where event_i
 select tests.expect_count(format($$select 1 from public.events where id = %L and end_date = '2026-11-10'$$, :'ev'), 1, '수정: 마지막 날이 따라 바뀜');
 select tests.expect_count(format($$select 1 from public.event_days where id = %L and start_time = '13:00' and sort_order = 1$$, :'day_setup'), 1, '수정: 날짜 순서와 시간 변경');
 select tests.expect_count(format($$select 1 from public.applications where event_id = %L and status <> 'cancelled'$$, :'ev'), 6, '수정: 신청은 그대로 (A 3 · B 1 · C 2)');
+
+
+-- 6. 긴 제목으로 공개, 긴 사유로 취소 (알림 길이 제한) ---------------------------------------------
+
+select tests.act_as('00000000-0000-0000-0000-00000000004a');
+set role authenticated;
+select public.create_event(
+  format('{"type":"event","title":"%s"}', repeat('가', 80))::jsonb,
+  '[{"day_date":"2026-11-29","start_time":"09:00","end_time":"12:00","positions":[{"role_name":"진행요원","pay_type":"hourly","rate":12000,"headcount":1}]},
+    {"day_date":"2026-12-01","start_time":"09:00","end_time":"12:00","positions":[{"role_name":"진행요원","pay_type":"hourly","rate":12000,"headcount":1}]}]',
+  '[]', '', ''
+) as ev3 \gset
+select public.set_event_status(:'ev3', 'open_core');
+reset role;
+select tests.expect_count($$select 1 from public.notifications where user_id = '00000000-0000-0000-0000-00000000004b' and type = 'event.open' and char_length(title) = 100 and title like '핵심 인력 먼저 공개: 11/29~12/1 가%'$$, 1, '긴 제목: 공개 알림 제목을 100자로 잘라 공개 성공');
+
+select id as ev3_pos from public.event_positions where event_id = :'ev3' order by sort_order limit 1 \gset
+select array_agg(id) as ev3_positions from public.event_positions where event_id = :'ev3' \gset
+select tests.act_as('00000000-0000-0000-0000-00000000004b');
+set role authenticated;
+select public.apply_to_event(:'ev3', :'ev3_positions'::uuid[]);
+reset role;
+
+select tests.act_as('00000000-0000-0000-0000-00000000004a');
+set role authenticated;
+select public.set_event_status(:'ev3', 'cancelled', repeat('사', 450));
+reset role;
+select tests.expect_count(format($$select 1 from public.events where id = %L and status = 'cancelled' and char_length(cancel_reason) = 450$$, :'ev3'), 1, '긴 사유: 취소 성공, 일정에는 사유 전체 저장');
+select tests.expect_count($$select 1 from public.notifications where type = 'event.cancelled' and user_id = '00000000-0000-0000-0000-00000000004b' and char_length(body) = 300$$, 1, '긴 사유: 취소 알림은 한 사람에게 한 번, 내용은 300자로');
 
 \echo 'ALL PHASE 2B (MULTI-DAY) RLS TESTS PASSED'
