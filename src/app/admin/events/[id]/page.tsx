@@ -4,12 +4,10 @@ import { z } from "zod";
 import { requireAdmin, TIER_LABEL, type MemberTier } from "@/lib/auth";
 import {
   DAY_COLUMNS,
-  DAY_RECRUIT_LABEL,
   EVENT_COLUMNS,
   EVENT_STATUS_LABEL,
   EVENT_TYPE_LABEL,
   EXTRA_COLUMNS,
-  POSITION_COLUMNS,
   dailyExtras,
   dayLabel,
   describeExtras,
@@ -25,19 +23,21 @@ import {
   type DayRow,
   type EventRow,
   type ExtraRuleRow,
-  type PositionRow,
 } from "@/lib/events";
 import { formatDate, formatDateTime, formatWon } from "@/lib/format";
-import { calculatePay, PAY_TYPE_LABEL, parsePayRules, type PayRules } from "@/lib/pay";
+import { calculatePay, effectiveRate, PAY_TYPE_LABEL, parsePayRules, type PayRules, type RoleRate } from "@/lib/pay";
 import { STATUS_BADGE } from "../badges";
 import { EventForm, type EventFormValues } from "../event-form";
 import { loadRolesAndRules } from "../load";
+import { loadSettlement } from "@/lib/settlement-load";
 import { AttendanceBoard, type AttendanceDay, type PersonTotal } from "./attendance-board";
-import { SelectionBoard, type ApplicantRow, type DayOption, type MemberOption, type PositionStat } from "./selection-board";
+import { ContractBoard, type ContractRow } from "./contract-board";
+import { PaymentBoard, type PaymentRow, type SavedPayment } from "./payment-board";
+import { SelectionBoard, type ApplicantRow, type DayOption, type MemberOption } from "./selection-board";
 import { StatusActions } from "./status-actions";
 
 type Supabase = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
-type Tab = "applicants" | "attendance" | "info";
+type Tab = "applicants" | "attendance" | "contracts" | "payments" | "info";
 
 interface InternalRow {
   client_name: string;
@@ -48,14 +48,15 @@ interface AppRow {
   id: string;
   member_id: string;
   day_id: string;
-  position_id: string;
   status: ApplicationStatus;
   added_by_admin: boolean;
   attendance: Attendance;
   overtime_minutes: number;
   applied_at: string;
   notified_status: ApplicationStatus | null;
-  member: { name: string; tier: MemberTier } | null;
+  role_name: string;
+  rate_override: number | null;
+  member: { name: string; tier: MemberTier; default_rate: number | null } | null;
 }
 
 // 신청자가 많을 때 주소가 너무 길어지지 않게 나눠서 불러온다
@@ -65,18 +66,27 @@ function chunk<T>(list: T[], size = 100): T[][] {
   return out;
 }
 
+const rateLabel = (r: RoleRate) => `${PAY_TYPE_LABEL[r.payType]} ${formatWon(r.rate)}`;
+
+// 이 신청에 적용되는 단가와, 기본과 다르면 그 이유
+function applicationRate(a: AppRow, day: DayRow | undefined): { rate: RoleRate; text: string } {
+  const base = toRoleRate(day ?? { pay_type: "hourly", rate: 0, min_paid_hours: null, overtime_rate: null });
+  const rate = effectiveRate(base, a.member?.default_rate ?? null, a.rate_override);
+  const reason = a.rate_override !== null ? " · 이 일정만" : rate.rate !== base.rate ? " · 회원 기본" : "";
+  return { rate, text: `${rateLabel(rate)}${reason}` };
+}
+
 async function loadEvent(supabase: Supabase, id: string) {
-  const [{ data: event }, { data: internal }, { data: chat }, { data: days }, { data: positions }, { data: extras }, { data: apps }] = await Promise.all([
+  const [{ data: event }, { data: internal }, { data: chat }, { data: days }, { data: extras }, { data: apps }] = await Promise.all([
     supabase.from("events").select(EVENT_COLUMNS).eq("id", id).maybeSingle<EventRow>(),
     supabase.from("event_internal").select("client_name, memo").eq("event_id", id).maybeSingle<InternalRow>(),
     supabase.from("event_chat_links").select("chat_link").eq("event_id", id).maybeSingle<{ chat_link: string }>(),
     supabase.from("event_days").select(DAY_COLUMNS).eq("event_id", id).order("day_date").order("start_time").returns<DayRow[]>(),
-    supabase.from("event_positions").select(POSITION_COLUMNS).eq("event_id", id).order("sort_order").returns<PositionRow[]>(),
     supabase.from("event_extra_rules").select(EXTRA_COLUMNS).eq("event_id", id).returns<ExtraRuleRow[]>(),
     supabase
       .from("applications")
       .select(
-        "id, member_id, day_id, position_id, status, added_by_admin, attendance, overtime_minutes, applied_at, notified_status, member:profiles!applications_member_id_fkey(name, tier)",
+        "id, member_id, day_id, status, added_by_admin, attendance, overtime_minutes, applied_at, notified_status, role_name, rate_override, member:profiles!applications_member_id_fkey(name, tier, default_rate)",
       )
       .eq("event_id", id)
       .order("applied_at")
@@ -87,7 +97,6 @@ async function loadEvent(supabase: Supabase, id: string) {
     internal,
     chatLink: chat?.chat_link ?? "",
     days: days ?? [],
-    positions: positions ?? [],
     extras: extras ?? [],
     apps: apps ?? [],
   };
@@ -132,16 +141,21 @@ async function loadActiveMembers(supabase: Supabase, selectedHere: Set<string>):
     .sort((a, b) => Number(b.selectedHere) - Number(a.selectedHere));
 }
 
+// 역할 이름 입력칸에 보여 줄 추천 (단가표의 역할 이름)
+async function loadRoleNames(supabase: Supabase): Promise<string[]> {
+  const { data } = await supabase.from("job_roles").select("name").eq("is_active", true).order("sort_order").returns<{ name: string }[]>();
+  return (data ?? []).map((r) => r.name);
+}
+
 interface EventData {
   event: EventRow;
   internal: InternalRow | null;
   chatLink: string;
   days: DayRow[];
-  positions: PositionRow[];
   extras: ExtraRuleRow[];
 }
 
-function toFormValues({ event, internal, chatLink, days, positions, extras }: EventData): EventFormValues {
+function toFormValues({ event, internal, chatLink, days, extras }: EventData): EventFormValues {
   const rule = (type: ExtraRuleRow["type"], tier: ExtraRuleRow["tier"]) => extras.find((e) => e.type === type && e.tier === tier);
   const regionalAll = rule("regional", "all");
   const regionalCore = rule("regional", "core") ?? regionalAll;
@@ -163,23 +177,14 @@ function toFormValues({ event, internal, chatLink, days, positions, extras }: Ev
       id: d.id,
       dayDate: d.day_date,
       kind: d.kind,
-      recruit: d.recruit,
       gatherTime: formatTime(d.gather_time),
       startTime: formatTime(d.start_time),
       endTime: formatTime(d.end_time),
-      positions: positions
-        .filter((p) => p.day_id === d.id)
-        .map((p) => ({
-          key: p.id,
-          id: p.id,
-          roleId: p.role_id,
-          roleName: p.role_name,
-          payType: p.pay_type,
-          rate: String(p.rate),
-          minPaidHours: p.min_paid_hours === null ? "" : String(Number(p.min_paid_hours)),
-          overtimeRate: p.overtime_rate === null ? "" : String(p.overtime_rate),
-          headcount: String(p.headcount),
-        })),
+      headcount: String(d.headcount),
+      payType: d.pay_type,
+      rate: String(d.rate),
+      minPaidHours: d.min_paid_hours === null ? "" : String(Number(d.min_paid_hours)),
+      overtimeRate: d.overtime_rate === null ? "" : String(d.overtime_rate),
     })),
     allDaysRequired: event.all_days_required,
     transportOn: transport !== undefined,
@@ -193,9 +198,8 @@ function toFormValues({ event, internal, chatLink, days, positions, extras }: Ev
 }
 
 // 저장된 출석으로 사람별 보수·추가 지급 합계를 낸다
-function personTotals(apps: AppRow[], days: DayRow[], positions: PositionRow[], extras: ExtraRuleRow[], rules: PayRules): PersonTotal[] {
+function personTotals(apps: AppRow[], days: DayRow[], extras: ExtraRuleRow[], rules: PayRules): PersonTotal[] {
   const dayById = new Map(days.map((d) => [d.id, d]));
-  const posById = new Map(positions.map((p) => [p.id, p]));
   const byMember = new Map<string, PersonTotal>();
   for (const a of apps) {
     if (a.status !== "selected") continue;
@@ -203,16 +207,107 @@ function personTotals(apps: AppRow[], days: DayRow[], positions: PositionRow[], 
     const total = byMember.get(a.member_id) ?? { memberId: a.member_id, name: a.member?.name ?? "(알 수 없음)", tier, workedDays: 0, totalDays: 0, pay: 0, extras: 0 };
     total.totalDays += 1;
     const day = dayById.get(a.day_id);
-    const position = posById.get(a.position_id);
-    if ((a.attendance === "attended" || a.attendance === "late") && day && position) {
+    if ((a.attendance === "attended" || a.attendance === "late") && day) {
       total.workedDays += 1;
-      total.pay += calculatePay(toRoleRate(position), rules, { scheduledMinutes: scheduledMinutes(day.start_time, day.end_time), overtimeMinutes: a.overtime_minutes }).total;
+      total.pay += calculatePay(applicationRate(a, day).rate, rules, {
+        scheduledMinutes: scheduledMinutes(day.start_time, day.end_time),
+        overtimeMinutes: a.overtime_minutes,
+      }).total;
     }
     byMember.set(a.member_id, total);
   }
   return [...byMember.values()]
     .map((t) => ({ ...t, extras: extrasTotal(extrasForTier(extras, t.tier), t.workedDays) }))
     .sort((x, y) => x.name.localeCompare(y.name, "ko"));
+}
+
+interface ContractDbRow {
+  id: string;
+  member_id: string;
+  status: "requested" | "signed" | "voided";
+  requested_at: string;
+  signed_at: string | null;
+}
+
+interface PaymentDbRow {
+  member_id: string;
+  status: SavedPayment["status"];
+  pay_date: string;
+  gross: number;
+  income_tax: number;
+  local_tax: number;
+  net: number;
+  edited: boolean;
+  memo: string;
+  held_reason: string;
+  payment_items: { kind: PaymentRow["computed"]["items"][number]["kind"]; label: string; amount: number; day_id: string | null; sort_order: number }[];
+}
+
+// "계약"·"정산" 탭: 확정자별 계약 현황과 정산
+async function settleTab(supabase: Supabase, event: EventRow, tab: "contracts" | "payments") {
+  const s = await loadSettlement(supabase, event.id);
+  const memberIds = s?.members.map((m) => m.memberId) ?? [];
+  const { data: privRows } = memberIds.length
+    ? await supabase.from("member_private").select("member_id").in("member_id", memberIds).returns<{ member_id: string }[]>()
+    : { data: [] };
+  const hasPrivate = new Set((privRows ?? []).map((p) => p.member_id));
+  const canAct = event.status !== "draft" && event.status !== "cancelled";
+
+  if (tab === "contracts") {
+    const { data } = await supabase.from("contracts").select("id, member_id, status, requested_at, signed_at").eq("event_id", event.id).order("requested_at").returns<ContractDbRow[]>();
+    // 사람마다 가장 최근 계약서 (무효가 아닌 것이 있으면 그것)
+    const latest = new Map<string, ContractDbRow>();
+    for (const c of data ?? []) {
+      const prev = latest.get(c.member_id);
+      if (!prev || prev.status === "voided") latest.set(c.member_id, c);
+    }
+    const rows: ContractRow[] = (s?.members ?? []).map((m) => {
+      const c = latest.get(m.memberId);
+      return {
+        memberId: m.memberId,
+        name: m.name,
+        hasPrivate: hasPrivate.has(m.memberId),
+        contract: c ? { id: c.id, status: c.status, requestedAt: c.requested_at, signedAt: c.signed_at } : null,
+      };
+    });
+    return <ContractBoard eventId={event.id} rows={rows} canSend={canAct} />;
+  }
+
+  const { data } = await supabase
+    .from("payments")
+    .select("member_id, status, pay_date, gross, income_tax, local_tax, net, edited, memo, held_reason, payment_items(kind, label, amount, day_id, sort_order)")
+    .eq("event_id", event.id)
+    .returns<PaymentDbRow[]>();
+  const saved = new Map((data ?? []).map((p) => [p.member_id, p]));
+  const rows: PaymentRow[] = (s?.members ?? []).map((m) => {
+    const p = saved.get(m.memberId);
+    return {
+      memberId: m.memberId,
+      name: m.name,
+      hasPrivate: hasPrivate.has(m.memberId),
+      computed: {
+        items: m.actual.items,
+        gross: m.actual.workAmount + m.actual.extraAmount,
+        unknownDays: m.actual.unknownDays,
+        missingOvertimeRate: m.actual.missingOvertimeRate,
+      },
+      saved: p
+        ? {
+            status: p.status,
+            payDate: p.pay_date,
+            gross: p.gross,
+            incomeTax: p.income_tax,
+            localTax: p.local_tax,
+            net: p.net,
+            edited: p.edited,
+            memo: p.memo,
+            heldReason: p.held_reason,
+            items: [...p.payment_items].sort((a, b) => a.sort_order - b.sort_order).map(({ kind, label, amount, day_id }) => ({ kind, label, amount, day_id })),
+          }
+        : null,
+    };
+  });
+  return <PaymentBoard eventId={event.id} rows={rows} tax={s?.tax ?? { type: "unset", threshold: true, includeExtras: true }} defaultPayDate={s?.payDate ?? event.end_date} canSettle={canAct} />;
 }
 
 function InfoRow({ term, children }: { term: string; children: React.ReactNode }) {
@@ -225,7 +320,7 @@ function InfoRow({ term, children }: { term: string; children: React.ReactNode }
 }
 
 // 완료·취소된 일정은 고칠 수 없으니 읽기 전용으로 보여 준다
-function EventSummary({ event, internal, chatLink, days, positions, extras }: EventData) {
+function EventSummary({ event, internal, chatLink, days, extras }: EventData) {
   const core = extrasForTier(extras, "core");
   const general = extrasForTier(extras, "general");
   const multiDay = days.length > 1;
@@ -235,11 +330,7 @@ function EventSummary({ event, internal, chatLink, days, positions, extras }: Ev
         <InfoRow term="장소">{[event.location_name, event.address].filter(Boolean).join(" · ") || "—"}</InfoRow>
         {days.map((d) => (
           <InfoRow key={d.id} term={dayLabel(d)}>
-            {`${formatTime(d.start_time)}–${formatTime(d.end_time)} · ${DAY_RECRUIT_LABEL[d.recruit]}\n`}
-            {positions
-              .filter((p) => p.day_id === d.id)
-              .map((p) => `${p.role_name} ${p.headcount}명 · ${PAY_TYPE_LABEL[p.pay_type]} ${formatWon(p.rate)}`)
-              .join("\n")}
+            {`${formatTime(d.start_time)}–${formatTime(d.end_time)} · ${d.headcount}명 · ${rateLabel(toRoleRate(d))}`}
           </InfoRow>
         ))}
         <InfoRow term="추가 지급">
@@ -256,7 +347,7 @@ function EventSummary({ event, internal, chatLink, days, positions, extras }: Ev
   );
 }
 
-// 일정 상세: 공개 상태 바꾸기, 신청자 선발, 출석 확인, 일정 정보 수정
+// 일정 상세: 공개 상태 바꾸기, 신청자 선발·역할·단가, 출석 확인, 일정 정보 수정
 export default async function EventDetailPage({
   params,
   searchParams,
@@ -269,31 +360,38 @@ export default async function EventDetailPage({
   const requested = (await searchParams).tab;
 
   const { supabase } = await requireAdmin();
-  const { event, internal, chatLink, days, positions, extras, apps } = await loadEvent(supabase, id);
+  const { event, internal, chatLink, days, extras, apps } = await loadEvent(supabase, id);
   if (!event) notFound();
-  const data: EventData = { event, internal, chatLink, days, positions, extras };
+  const data: EventData = { event, internal, chatLink, days, extras };
 
   const status = event.status;
   const showAttendance = status !== "draft";
-  const tab: Tab = requested === "info" || (requested === "attendance" && showAttendance) ? requested : "applicants";
+  const tab: Tab =
+    requested === "info" || (showAttendance && (requested === "attendance" || requested === "contracts" || requested === "payments")) ? requested : "applicants";
   const locked = status === "completed" || status === "cancelled";
   const dayById = new Map(days.map((d) => [d.id, d]));
   const dayOrder = new Map(days.map((d, i) => [d.id, i]));
-  const positionById = new Map(positions.map((p) => [p.id, p]));
   const selected = apps.filter((a) => a.status === "selected");
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "applicants", label: `신청자·선발 ${new Set(apps.filter((a) => a.status !== "cancelled").map((a) => a.member_id)).size}명` },
-    ...(showAttendance ? [{ key: "attendance" as const, label: `출석 확인 ${new Set(selected.map((a) => a.member_id)).size}명` }] : []),
+    ...(showAttendance
+      ? [
+          { key: "attendance" as const, label: `출석 확인 ${new Set(selected.map((a) => a.member_id)).size}명` },
+          { key: "contracts" as const, label: "계약" },
+          { key: "payments" as const, label: "정산" },
+        ]
+      : []),
     { key: "info", label: "일정 정보" },
   ];
 
   let body: React.ReactNode = null;
   if (tab === "applicants") {
     const canAdd = !locked && status !== "draft";
-    const [history, members] = await Promise.all([
+    const [history, members, roleNames] = await Promise.all([
       loadMemberHistory(supabase, [...new Set(apps.map((a) => a.member_id))]),
       canAdd ? loadActiveMembers(supabase, new Set(selected.map((a) => a.member_id))) : Promise.resolve([]),
+      loadRoleNames(supabase),
     ]);
     // 같은 사람의 날짜별 신청이 붙어 보이게: 처음 신청한 순서 → 날짜 순서
     const firstApplied = new Map<string, number>();
@@ -312,8 +410,9 @@ export default async function EventDetailPage({
           tier: a.member?.tier ?? "general",
           dayId: a.day_id,
           dayLabel: day ? dayLabel(day) : "",
-          positionId: a.position_id,
-          positionName: positionById.get(a.position_id)?.role_name ?? "",
+          roleName: a.role_name,
+          rateOverride: a.rate_override,
+          rateText: applicationRate(a, day).text,
           status: a.status,
           appliedAt: formatDateTime(a.applied_at),
           addedByAdmin: a.added_by_admin,
@@ -323,19 +422,18 @@ export default async function EventDetailPage({
           lastNote: history.lastNote.get(a.member_id) ?? "",
         };
       });
-    const stats: PositionStat[] = positions.map((p) => {
-      const mine = apps.filter((a) => a.position_id === p.id);
+    const dayOptions: DayOption[] = days.map((d) => {
+      const mine = apps.filter((a) => a.day_id === d.id);
       return {
-        id: p.id,
-        dayId: p.day_id,
-        name: p.role_name,
-        headcount: p.headcount,
+        id: d.id,
+        label: dayLabel(d),
+        rateText: rateLabel(toRoleRate(d)),
+        headcount: d.headcount,
         selected: mine.filter((a) => a.status === "selected").length,
         waitlisted: mine.filter((a) => a.status === "waitlisted").length,
         applied: mine.filter((a) => a.status === "applied").length,
       };
     });
-    const dayOptions: DayOption[] = days.map((d) => ({ id: d.id, label: dayLabel(d), recruit: d.recruit }));
     const pendingNotify = new Set(apps.filter((a) => (a.status === "selected" || a.status === "rejected") && a.notified_status !== a.status).map((a) => a.member_id)).size;
     body = (
       <>
@@ -345,9 +443,9 @@ export default async function EventDetailPage({
         <SelectionBoard
           eventId={event.id}
           days={dayOptions}
-          positions={stats}
           applicants={applicants}
           members={members}
+          roleSuggestions={roleNames}
           editable={!locked}
           canAdd={canAdd}
           pendingNotify={pendingNotify}
@@ -363,20 +461,17 @@ export default async function EventDetailPage({
       scheduledMinutes: scheduledMinutes(d.start_time, d.end_time),
       rows: selected
         .filter((a) => a.day_id === d.id)
-        .sort(
-          (x, y) =>
-            (positionById.get(x.position_id)?.sort_order ?? 0) - (positionById.get(y.position_id)?.sort_order ?? 0) ||
-            (x.member?.name ?? "").localeCompare(y.member?.name ?? "", "ko"),
-        )
+        .sort((x, y) => x.role_name.localeCompare(y.role_name, "ko") || (x.member?.name ?? "").localeCompare(y.member?.name ?? "", "ko"))
         .map((a) => {
-          const position = positionById.get(a.position_id);
           const tier = a.member?.tier ?? "general";
+          const { rate, text } = applicationRate(a, d);
           return {
             id: a.id,
             name: a.member?.name ?? "(알 수 없음)",
             tier,
-            positionName: position?.role_name ?? "",
-            rate: toRoleRate(position ?? { pay_type: "hourly", rate: 0, min_paid_hours: null, overtime_rate: null }),
+            roleName: a.role_name,
+            rateText: text,
+            rate,
             attendance: a.attendance,
             overtimeMinutes: a.overtime_minutes,
             extras: dailyExtras(extrasForTier(extras, tier)),
@@ -387,13 +482,15 @@ export default async function EventDetailPage({
       status === "cancelled" ? (
         <p className="rounded-xl border border-line bg-white p-8 text-center text-muted">취소된 일정이라 출석을 확인할 수 없어요.</p>
       ) : (
-        <AttendanceBoard eventId={event.id} days={attendanceDays} rules={rules} totals={personTotals(apps, days, positions, extras, rules)} />
+        <AttendanceBoard eventId={event.id} days={attendanceDays} rules={rules} totals={personTotals(apps, days, extras, rules)} />
       );
+  } else if (tab === "contracts" || tab === "payments") {
+    body = await settleTab(supabase, event, tab);
   } else if (locked) {
     body = <EventSummary {...data} />;
   } else {
     const { roles, rules } = await loadRolesAndRules(supabase);
-    const used = new Set(apps.map((a) => a.position_id));
+    const used = new Set(apps.map((a) => a.day_id));
     body = (
       <EventForm
         mode="edit"
@@ -401,7 +498,7 @@ export default async function EventDetailPage({
         initial={toFormValues(data)}
         roles={roles}
         rules={rules}
-        lockedPositionIds={positions.filter((p) => used.has(p.id)).map((p) => p.id)}
+        lockedDayIds={days.filter((d) => used.has(d.id)).map((d) => d.id)}
       />
     );
   }
@@ -426,8 +523,6 @@ export default async function EventDetailPage({
         </p>
         <ul className="flex flex-col gap-1 text-sm text-body">
           {days.map((d) => {
-            const dayPositions = positions.filter((p) => p.day_id === d.id);
-            const headcount = dayPositions.reduce((sum, p) => sum + p.headcount, 0);
             const count = selected.filter((a) => a.day_id === d.id).length;
             return (
               <li key={d.id} className="flex flex-wrap gap-x-2">
@@ -437,7 +532,7 @@ export default async function EventDetailPage({
                   {formatTime(d.start_time)}–{formatTime(d.end_time)}
                 </span>
                 <span className="text-muted">
-                  · {DAY_RECRUIT_LABEL[d.recruit]} · 확정 <strong className="text-ink">{count}</strong> / {headcount}명
+                  · {rateLabel(toRoleRate(d))} · 확정 <strong className="text-ink">{count}</strong> / {d.headcount}명
                 </span>
               </li>
             );

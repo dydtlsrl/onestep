@@ -16,8 +16,8 @@ insert into public.profiles (id, name, phone, role, status, tier, privacy_agreed
 -- 1. 처음 값 --------------------------------------------------------------------
 
 select tests.expect_count($$select 1 from public.app_settings where key = 'pay_rules' and version = 1
-  and value = '{"overtime_multiplier": 1.5, "overtime_unit_minutes": 60, "overtime_rounding": "floor", "default_min_paid_hours": 0}'::jsonb$$,
-  1, '처음 값: 1.5배, 60분 단위, 버림, 최소 보장 0시간');
+  and value = '{"overtime_multiplier": 1.5, "overtime_unit_minutes": 60, "overtime_rounding": "floor", "default_min_paid_hours": 0, "default_hourly_rate": 11000}'::jsonb$$,
+  1, '처음 값: 1.5배, 60분 단위, 버림, 최소 보장 0시간, 기본 시급 11,000원');
 select tests.expect_count($$select 1 from public.app_settings_history where key = 'pay_rules' and version = 1$$, 1, '처음 값 이력이 남음');
 
 
@@ -68,5 +68,19 @@ select tests.expect_count($$select 1 from public.job_roles where name = '대기�
 select tests.expect_error($$update public.job_roles set min_paid_hours = 25 where name = '대기실 관리'$$, '%violates check constraint%');
 select tests.expect_error($$insert into public.job_roles (name, pay_type, default_rate) values ('잘못', 'weekly', 1)$$, '%invalid input value for enum%');
 reset role;
+
+-- 세팅일·진행일 기본 단가 (8번 파일) --------------------------------------------------------
+-- 위의 개수 검사는 이 파일이 만든 기본 두 줄을 빼고 센다 (default_for is null)
+
+select tests.expect_count($$select 1 from public.job_roles where default_for = 'setup' and name = '세팅 (기본)' and default_rate = 11000 and min_paid_hours = 4$$, 1, '처음 값: 세팅일 기본 11,000원·최소 4시간');
+select tests.expect_count($$select 1 from public.job_roles where default_for = 'main' and name = '진행 (기본)' and default_rate = 11000$$, 1, '처음 값: 진행일 기본 11,000원');
+
+select tests.act_as('00000000-0000-0000-0000-00000000002a');
+set role authenticated;
+select tests.expect_error($$update public.job_roles set default_for = 'setup' where name = '대기실 관리'$$, '%duplicate key%');
+update public.job_roles set default_for = null where default_for = 'setup';
+update public.job_roles set default_for = 'setup' where name = '대기실 관리';
+reset role;
+select tests.expect_count($$select 1 from public.job_roles where default_for = 'setup' and name = '대기실 관리'$$, 1, '대표: 세팅일 기본을 다른 단가로 바꿈');
 
 \echo 'ALL PAY RULES RLS TESTS PASSED'

@@ -92,20 +92,43 @@ export async function decideApplications(_prev: EventActionState, formData: Form
 
 export async function addMemberToEvent(_prev: EventActionState, formData: FormData): Promise<EventActionState> {
   const eventId = z.uuid().safeParse(formData.get("eventId"));
-  const positionId = z.uuid().safeParse(formData.get("positionId"));
+  const dayId = z.uuid().safeParse(formData.get("dayId"));
   const memberId = z.uuid().safeParse(formData.get("memberId"));
-  if (!eventId.success || !positionId.success || !memberId.success) return { error: "회원과 역할을 골라 주세요." };
+  if (!eventId.success || !dayId.success || !memberId.success) return { error: "회원과 날짜를 골라 주세요." };
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("add_member_to_event", {
     p_event_id: eventId.data,
-    p_position_id: positionId.data,
+    p_day_id: dayId.data,
     p_member_id: memberId.data,
   });
   if (error) return { error: messageForError(error) };
 
   refresh(eventId.data);
-  return { ok: "확정자로 추가했어요. 선발 결과 알림을 보내면 그 회원에게도 알림이 가요." };
+  return { ok: "확정자로 넣었어요. 선발 결과 알림을 보내면 그 회원에게도 알림이 가요." };
+}
+
+// 신청자의 역할 이름과 "이 사람만 다른 단가"를 저장한다 (둘 다 비워도 된다)
+export async function saveApplicationDetail(_prev: EventActionState, formData: FormData): Promise<EventActionState> {
+  const eventId = z.uuid().safeParse(formData.get("eventId"));
+  const appId = z.uuid().safeParse(formData.get("applicationId"));
+  const roleName = z.string().trim().max(30, "역할 이름은 30자까지예요.").safeParse(String(formData.get("roleName") ?? ""));
+  const rawRate = String(formData.get("rateOverride") ?? "").replace(/[^0-9]/g, "");
+  const rate = rawRate === "" ? null : Number(rawRate);
+  if (!eventId.success || !appId.success) return { error: "잘못된 요청이에요." };
+  if (!roleName.success) return { error: roleName.error.issues[0]?.message ?? "역할 이름을 확인해 주세요." };
+  if (rate !== null && rate > 10_000_000) return { error: "단가가 너무 커요." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_application_detail", {
+    p_application_id: appId.data,
+    p_role_name: roleName.data,
+    p_rate_override: rate,
+  });
+  if (error) return { error: messageForError(error) };
+
+  refresh(eventId.data);
+  return { ok: "저장했어요." };
 }
 
 export async function notifyResults(_prev: EventActionState, formData: FormData): Promise<EventActionState> {

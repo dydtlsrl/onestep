@@ -11,7 +11,6 @@ import {
   EXTRA_COLUMNS,
   MEMBER_APPLICATION_LABEL,
   MEMBER_EVENT_STATUS_LABEL,
-  POSITION_COLUMNS,
   dayLabel,
   describeExtras,
   extrasForTier,
@@ -24,20 +23,20 @@ import {
   type DayRow,
   type EventRow,
   type ExtraRuleRow,
-  type PositionRow,
   type SelectedCount,
 } from "@/lib/events";
 import { formatDate, formatDateTime, formatWon } from "@/lib/format";
-import { calculatePay, PAY_TYPE_LABEL, parsePayRules } from "@/lib/pay";
+import { calculatePay, effectiveRate, PAY_TYPE_LABEL, parsePayRules } from "@/lib/pay";
 import { ApplyForm, CancelForm, type DayChoice } from "./apply-forms";
 
 type Supabase = Awaited<ReturnType<typeof requireMember>>["supabase"];
 
 interface MyApplication {
   day_id: string;
-  position_id: string;
   status: ApplicationStatus;
   notified_status: ApplicationStatus | null;
+  role_name: string;
+  rate_override: number | null;
 }
 
 const MY_BADGE: Record<ApplicationStatus, string> = {
@@ -53,36 +52,37 @@ function timeText(day: DayRow): string {
 }
 
 async function loadEvent(supabase: Supabase, id: string, userId: string, tier: MemberTier) {
-  const [{ data: event }, { data: days }, { data: positions }, { data: extras }, { data: mine }, { data: counts }, { data: chat }, { data: setting }] =
+  const [{ data: event }, { data: days }, { data: extras }, { data: mine }, { data: counts }, { data: chat }, { data: setting }, { data: me }] =
     await Promise.all([
       supabase.from("events").select(EVENT_COLUMNS).eq("id", id).maybeSingle<EventRow>(),
       supabase.from("event_days").select(DAY_COLUMNS).eq("event_id", id).order("day_date").order("start_time").returns<DayRow[]>(),
-      supabase.from("event_positions").select(POSITION_COLUMNS).eq("event_id", id).order("sort_order").returns<PositionRow[]>(),
       supabase.from("event_extra_rules").select(EXTRA_COLUMNS).eq("event_id", id).returns<ExtraRuleRow[]>(),
-      supabase.from("applications").select("day_id, position_id, status, notified_status").eq("event_id", id).eq("member_id", userId).returns<MyApplication[]>(),
-      supabase.rpc("position_selected_counts", { p_event_ids: [id] }),
+      supabase
+        .from("applications")
+        .select("day_id, status, notified_status, role_name, rate_override")
+        .eq("event_id", id)
+        .eq("member_id", userId)
+        .returns<MyApplication[]>(),
+      supabase.rpc("day_selected_counts", { p_event_ids: [id] }),
       supabase.from("event_chat_links").select("chat_link").eq("event_id", id).maybeSingle<{ chat_link: string }>(),
       supabase.from("app_settings").select("value").eq("key", "pay_rules").maybeSingle<{ value: unknown }>(),
+      supabase.from("profiles").select("default_rate").eq("id", userId).maybeSingle<{ default_rate: number | null }>(),
     ]);
   if (!event) return null;
 
   const rules = parsePayRules(setting?.value);
-  const selected = new Map(((counts ?? []) as SelectedCount[]).map((c) => [c.position_id, c.selected_count]));
-  const dayChoices: (DayChoice & { recruit: DayRow["recruit"] })[] = (days ?? []).map((d) => {
-    const minutes = scheduledMinutes(d.start_time, d.end_time);
+  const selected = new Map(((counts ?? []) as SelectedCount[]).map((c) => [c.day_id, c.selected_count]));
+  const myApps = new Map((mine ?? []).map((a) => [a.day_id, a]));
+  // 회원에게 보여 줄 예상 보수: 대표가 이 사람만 정한 단가 → 회원 기본 시급과 날짜 단가 중 높은 쪽 → 날짜 단가
+  const dayChoices: DayChoice[] = (days ?? []).map((d) => {
+    const rate = effectiveRate(toRoleRate(d), me?.default_rate ?? null, myApps.get(d.id)?.rate_override ?? null);
+    const total = calculatePay(rate, rules, { scheduledMinutes: scheduledMinutes(d.start_time, d.end_time), overtimeMinutes: 0 }).total;
     return {
       id: d.id,
       label: dayLabel(d),
       timeText: timeText(d),
-      recruit: d.recruit,
-      positions: (positions ?? [])
-        .filter((p) => p.day_id === d.id)
-        .map((p) => ({
-          id: p.id,
-          name: p.role_name,
-          payText: `${PAY_TYPE_LABEL[p.pay_type]} ${formatWon(p.rate)} · 예상 ${formatWon(calculatePay(toRoleRate(p), rules, { scheduledMinutes: minutes, overtimeMinutes: 0 }).total)}`,
-          remaining: Math.max(0, p.headcount - (selected.get(p.id) ?? 0)),
-        })),
+      payText: `${PAY_TYPE_LABEL[rate.payType]} ${formatWon(rate.rate)} · 예상 ${formatWon(total)}`,
+      remaining: Math.max(0, d.headcount - (selected.get(d.id) ?? 0)),
     };
   });
 
@@ -118,15 +118,13 @@ export default async function MemberEventPage({ params }: { params: Promise<{ id
   const { event, days, extras, mine, chatLink, deadlinePassed } = data;
 
   const multiDay = days.length > 1;
-  const openDays = days.filter((d) => d.recruit === "open");
   const active = mine.filter((a) => a.shown !== "cancelled");
-  const myOpenActive = active.filter((a) => openDays.some((d) => d.id === a.day_id));
   const anySelected = active.some((a) => a.shown === "selected");
   const canCancel = !anySelected && active.some((a) => a.shown === "applied" || a.shown === "waitlisted");
   const open = (event.status === "open_core" || event.status === "open_all") && !deadlinePassed;
   const dayIndex = new Map(days.map((d, i) => [d.id, i]));
-  // 취소했던 신청이 있으면 그때 고른 날짜·역할을 미리 골라 둔다
-  const initialPicks = Object.fromEntries(mine.filter((a) => a.shown === "cancelled").map((a) => [a.day_id, a.position_id]));
+  // 취소했던 신청이 있으면 그때 고른 날짜를 미리 골라 둔다
+  const initialDays = mine.filter((a) => a.shown === "cancelled").map((a) => a.day_id);
 
   return (
     <PageShell actions={<NotificationBell />}>
@@ -161,29 +159,16 @@ export default async function MemberEventPage({ params }: { params: Promise<{ id
       )}
 
       <Card>
-        <h2 className="text-lg font-bold">{multiDay ? "날짜별 시간과 보수" : "역할과 보수"}</h2>
-        <ul className="flex flex-col gap-4">
+        <h2 className="text-lg font-bold">{multiDay ? "날짜별 시간과 보수" : "시간과 보수"}</h2>
+        <ul className="flex flex-col gap-2">
           {days.map((d) => (
-            <li key={d.id} className="flex flex-col gap-2">
-              {multiDay && (
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="font-bold">{d.label}</span>
-                  <span className="text-sm text-body">{d.timeText}</span>
-                </div>
-              )}
-              {d.recruit === "assign" ? (
-                <p className="rounded-lg bg-ground px-4 py-3 text-sm text-body">이 날은 대표님이 인원을 따로 정해요. 신청하지 않아도 돼요.</p>
-              ) : (
-                d.positions.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg bg-ground px-4 py-3">
-                    <span className="flex flex-col">
-                      <span className="font-bold">{p.name}</span>
-                      <span className="text-[13px] text-body">{p.payText}</span>
-                    </span>
-                    <span className="text-[13px] text-muted">{p.remaining > 0 ? `${p.remaining}자리 남음` : "다 찼어요"}</span>
-                  </div>
-                ))
-              )}
+            <li key={d.id} className="flex items-center justify-between gap-3 rounded-lg bg-ground px-4 py-3">
+              <span className="flex flex-col">
+                <span className="font-bold">{multiDay ? d.label : d.timeText}</span>
+                {multiDay && <span className="text-[13px] text-body">{d.timeText}</span>}
+                <span className="text-[13px] text-body">{d.payText}</span>
+              </span>
+              <span className="text-[13px] text-muted">{d.remaining > 0 ? `${d.remaining}자리 남음` : "다 찼어요"}</span>
             </li>
           ))}
         </ul>
@@ -207,12 +192,16 @@ export default async function MemberEventPage({ params }: { params: Promise<{ id
                 .sort((x, y) => (dayIndex.get(x.day_id) ?? 0) - (dayIndex.get(y.day_id) ?? 0))
                 .map((a) => {
                   const day = days[dayIndex.get(a.day_id) ?? -1];
-                  const position = day?.positions.find((p) => p.id === a.position_id);
+                  // 역할은 확정 알림을 받은 뒤에 보여 준다
+                  const role = a.shown === "selected" && a.role_name ? ` · ${a.role_name}` : "";
                   return (
                     <li key={a.day_id} className="flex items-center justify-between gap-3 rounded-lg border border-line px-4 py-3">
                       <span className="flex flex-col">
-                        <span className="font-bold">{multiDay ? day?.label : position?.name}</span>
-                        <span className="text-[13px] text-muted">{multiDay ? `${position?.name ?? ""} · ${day?.timeText ?? ""}` : day?.timeText}</span>
+                        <span className="font-bold">
+                          {multiDay ? day?.label : day?.timeText}
+                          {role}
+                        </span>
+                        {multiDay && <span className="text-[13px] text-muted">{day?.timeText}</span>}
                       </span>
                       <span className={`whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-bold ${MY_BADGE[a.shown]}`}>{MEMBER_APPLICATION_LABEL[a.shown]}</span>
                     </li>
@@ -244,11 +233,11 @@ export default async function MemberEventPage({ params }: { params: Promise<{ id
           {!anySelected && active.some((a) => a.shown === "applied") && <p className="text-[15px] text-body">선발 결과는 알림으로 알려 드려요.</p>}
           {canCancel && event.status !== "completed" && <CancelForm eventId={event.id} />}
 
-          {myOpenActive.length === 0 &&
-            (open && openDays.length > 0 ? (
+          {active.length === 0 &&
+            (open && days.length > 0 ? (
               <>
                 {mine.some((a) => a.shown === "cancelled") && <p className="text-[13px] text-muted">신청을 취소했어요. 다시 신청할 수 있어요.</p>}
-                <ApplyForm eventId={event.id} days={openDays} allRequired={event.all_days_required} initialPicks={initialPicks} />
+                <ApplyForm eventId={event.id} days={days} allRequired={event.all_days_required} initialDays={initialDays} />
               </>
             ) : (
               active.length === 0 && (

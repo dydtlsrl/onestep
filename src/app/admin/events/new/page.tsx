@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAdmin } from "@/lib/auth";
-import { EMPTY_EVENT, EventForm } from "../event-form";
+import { EventForm } from "../event-form";
+import { emptyEvent } from "../event-form-values";
 import { loadRolesAndRules } from "../load";
 
 export default async function NewEventPage() {
@@ -15,10 +16,10 @@ export default async function NewEventPage() {
       <h1 className="text-2xl font-bold tracking-tight">새 일정</h1>
       {roles.length === 0 && (
         <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">
-          단가표에 역할이 없어요. <Link href="/admin/rates" className="font-bold underline">단가표</Link>에서 먼저 역할을 만들면 편해요. (직접 입력도 가능해요)
+          단가표가 비어 있어요. 날짜마다 단가를 직접 적거나, <Link href="/admin/rates" className="font-bold underline">단가표</Link>에 자주 쓰는 단가를 저장해 두면 버튼 한 번으로 불러올 수 있어요.
         </p>
       )}
-      <EventForm mode="create" initial={EMPTY_EVENT} roles={roles} rules={rules} />
+      <EventForm mode="create" initial={emptyEvent(rules, roles)} roles={roles} rules={rules} />
     </>
   );
 }

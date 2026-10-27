@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculatePay, countOvertimeHours, DEFAULT_PAY_RULES, parsePayRules, type PayRules, type RoleRate } from "./pay";
+import { calculatePay, countOvertimeHours, effectiveRate, DEFAULT_PAY_RULES, parsePayRules, type PayRules, type RoleRate } from "./pay";
 
 const hourly: RoleRate = { payType: "hourly", rate: 12000, minPaidHours: null, overtimeRate: null };
 const daily: RoleRate = { payType: "daily", rate: 130000, minPaidHours: null, overtimeRate: 15000 };
@@ -93,12 +93,32 @@ describe("calculatePay: 일급", () => {
 describe("parsePayRules", () => {
   it("DB 값을 읽는다", () => {
     expect(
-      parsePayRules({ overtime_multiplier: 2, overtime_unit_minutes: 30, overtime_rounding: "ceil", default_min_paid_hours: 4 }),
-    ).toEqual({ overtimeMultiplier: 2, overtimeUnitMinutes: 30, overtimeRounding: "ceil", defaultMinPaidHours: 4 });
+      parsePayRules({ overtime_multiplier: 2, overtime_unit_minutes: 30, overtime_rounding: "ceil", default_min_paid_hours: 4, default_hourly_rate: 11500 }),
+    ).toEqual({ overtimeMultiplier: 2, overtimeUnitMinutes: 30, overtimeRounding: "ceil", defaultMinPaidHours: 4, defaultHourlyRate: 11500 });
   });
 
   it("값이 이상하면 기본값", () => {
     expect(parsePayRules(null)).toEqual(DEFAULT_PAY_RULES);
     expect(parsePayRules({ overtime_rounding: "weird", overtime_multiplier: "1.5" })).toEqual(DEFAULT_PAY_RULES);
+  });
+});
+
+describe("effectiveRate", () => {
+  const day = { payType: "hourly" as const, rate: 11000, minPaidHours: 4, overtimeRate: null };
+
+  it("이 사람만 정한 단가가 가장 먼저", () => {
+    expect(effectiveRate(day, 13000, 14000).rate).toBe(14000);
+    expect(effectiveRate(day, 13000, 9000).rate).toBe(9000);
+  });
+
+  it("시급이면 회원 기본 시급과 날짜 단가 중 높은 쪽", () => {
+    expect(effectiveRate(day, 13000, null).rate).toBe(13000);
+    expect(effectiveRate(day, 10000, null).rate).toBe(11000);
+    expect(effectiveRate(day, null, null)).toEqual(day);
+  });
+
+  it("일급 날짜에는 회원 기본 시급을 쓰지 않음", () => {
+    const daily = { payType: "daily" as const, rate: 110000, minPaidHours: null, overtimeRate: 15000 };
+    expect(effectiveRate(daily, 13000, null).rate).toBe(110000);
   });
 });

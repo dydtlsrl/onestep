@@ -9,6 +9,7 @@ export interface PayRules {
   overtimeUnitMinutes: number; // 초과 시간 계산 단위 (10, 15, 30, 60분)
   overtimeRounding: OvertimeRounding; // 단위 미만 처리
   defaultMinPaidHours: number; // 역할에 따로 정하지 않았을 때의 최소 보장 시간
+  defaultHourlyRate: number; // 새 날짜를 만들 때 넣는 기본 시급 (처음 11,000원)
 }
 
 export const DEFAULT_PAY_RULES: PayRules = {
@@ -16,6 +17,7 @@ export const DEFAULT_PAY_RULES: PayRules = {
   overtimeUnitMinutes: 60,
   overtimeRounding: "floor",
   defaultMinPaidHours: 0,
+  defaultHourlyRate: 11000,
 };
 
 export interface RoleRate {
@@ -94,6 +96,14 @@ export function calculatePay(role: RoleRate, rules: PayRules, work: WorkTime): P
   };
 }
 
+// 이 사람에게 적용할 단가 (DB 20261102000000_day_signup.sql 맨 위 설명과 같은 순서)
+// 1. 이 일정에서 이 사람만 정한 단가  2. 시급이면 회원 기본 시급과 날짜 단가 중 높은 쪽  3. 날짜 단가
+export function effectiveRate(base: RoleRate, memberDefault: number | null, override: number | null): RoleRate {
+  if (override !== null) return { ...base, rate: override };
+  if (base.payType === "hourly" && memberDefault !== null) return { ...base, rate: Math.max(base.rate, memberDefault) };
+  return base;
+}
+
 // DB의 app_settings.value(pay_rules)를 읽는다. 값이 이상하면 기본값을 쓴다.
 export function parsePayRules(value: unknown): PayRules {
   const v = (value ?? {}) as Record<string, unknown>;
@@ -105,6 +115,7 @@ export function parsePayRules(value: unknown): PayRules {
     overtimeRounding:
       rounding === "floor" || rounding === "ceil" || rounding === "round" ? rounding : DEFAULT_PAY_RULES.overtimeRounding,
     defaultMinPaidHours: num(v.default_min_paid_hours, DEFAULT_PAY_RULES.defaultMinPaidHours),
+    defaultHourlyRate: num(v.default_hourly_rate, DEFAULT_PAY_RULES.defaultHourlyRate),
   };
 }
 

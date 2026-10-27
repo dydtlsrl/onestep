@@ -1,7 +1,7 @@
 // 일정 폼에 필요한 단가표와 계산 규칙을 불러온다
 import type { requireAdmin } from "@/lib/auth";
 import { parsePayRules } from "@/lib/pay";
-import type { RoleOption } from "./event-form";
+import type { RoleOption } from "./event-form-values";
 
 type Supabase = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
 
@@ -9,7 +9,7 @@ export async function loadRolesAndRules(supabase: Supabase) {
   const [{ data: roles }, { data: setting }] = await Promise.all([
     supabase
       .from("job_roles")
-      .select("id, name, pay_type, default_rate, min_paid_hours, overtime_rate")
+      .select("id, name, pay_type, default_rate, min_paid_hours, overtime_rate, default_for")
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
       .returns<RoleOption[]>(),

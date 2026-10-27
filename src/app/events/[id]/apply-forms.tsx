@@ -5,18 +5,13 @@ import { Notice } from "@/components/page-shell";
 import { SubmitButton } from "@/components/submit-button";
 import { applyToEvent, cancelMyApplication, type ApplyState } from "../actions";
 
-export interface PositionChoice {
-  id: string;
-  name: string;
-  payText: string;
-  remaining: number;
-}
-
+// 신청할 수 있는 날짜 하나. 보수는 이 회원에게 적용되는 단가로 계산한다.
 export interface DayChoice {
   id: string;
   label: string; // 11/8(일) 진행
   timeText: string; // 집합 07:30 · 08:00–13:00
-  positions: PositionChoice[];
+  payText: string; // 시급 11,000원 · 예상 55,000원
+  remaining: number;
 }
 
 function Message({ state }: { state: ApplyState }) {
@@ -35,51 +30,23 @@ function Message({ state }: { state: ApplyState }) {
   return null;
 }
 
-function PositionRadios({ day, picked, onPick }: { day: DayChoice; picked: string; onPick: (id: string) => void }) {
-  return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="mb-2 text-sm font-bold">{day.positions.length > 1 ? "하고 싶은 역할" : "역할"}</legend>
-      {day.positions.map((p) => (
-        <label
-          key={p.id}
-          className="flex cursor-pointer items-center gap-3 rounded-lg border border-field bg-white px-4 py-3 has-[:checked]:border-brand has-[:checked]:bg-brand-soft has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand"
-        >
-          <input type="radio" name={`role-${day.id}`} value={p.id} checked={picked === p.id} onChange={() => onPick(p.id)} className="h-4 w-4 accent-brand" />
-          <span className="flex flex-1 flex-col">
-            <span className="font-bold">{p.name}</span>
-            <span className="text-[13px] text-muted">{p.payText}</span>
-          </span>
-          <span className={`text-[13px] ${p.remaining > 0 ? "text-body" : "font-bold text-warn"}`}>{p.remaining > 0 ? `${p.remaining}자리 남음` : "대기 신청"}</span>
-        </label>
-      ))}
-    </fieldset>
-  );
-}
-
-// 참여할 날짜를 고르고 날짜마다 역할을 하나씩 골라 신청한다. 자리가 다 찼어도 대기로 신청할 수 있다.
+// 참여할 날짜를 골라 신청한다. 자리가 다 찼어도 대기로 신청할 수 있다. 역할은 대표가 나중에 정한다.
 // allRequired면 모든 날짜를 함께 신청해야 한다.
 export function ApplyForm({
   eventId,
   days,
   allRequired,
-  initialPicks = {},
+  initialDays = [],
 }: {
   eventId: string;
   days: DayChoice[];
   allRequired: boolean;
-  initialPicks?: Record<string, string>;
+  initialDays?: string[];
 }) {
   const [state, action] = useActionState<ApplyState, FormData>(applyToEvent, {});
   const single = days.length === 1;
-  const [joined, setJoined] = useState<Set<string>>(() => new Set(single || allRequired ? days.map((d) => d.id) : Object.keys(initialPicks)));
-  const [picks, setPicks] = useState<Record<string, string>>(() => {
-    const auto = Object.fromEntries(days.filter((d) => d.positions.length === 1).map((d) => [d.id, d.positions[0].id]));
-    return { ...auto, ...initialPicks };
-  });
-
+  const [joined, setJoined] = useState<Set<string>>(() => new Set(single || allRequired ? days.map((d) => d.id) : initialDays));
   const chosen = days.filter((d) => joined.has(d.id));
-  const missingRole = chosen.filter((d) => !picks[d.id]);
-  const ready = chosen.length > 0 && missingRole.length === 0;
 
   function toggleDay(id: string) {
     setJoined((prev) => {
@@ -93,44 +60,36 @@ export function ApplyForm({
   return (
     <form action={action} className="flex flex-col gap-4">
       <input type="hidden" name="eventId" value={eventId} />
-      {chosen.map((d) => picks[d.id] && <input key={d.id} type="hidden" name="positionId" value={picks[d.id]} />)}
+      {chosen.map((d) => (
+        <input key={d.id} type="hidden" name="dayId" value={d.id} />
+      ))}
 
       {allRequired && !single && <Notice>이 일정은 모든 날짜에 참여할 수 있는 분만 신청할 수 있어요.</Notice>}
 
-      {single ? (
-        <PositionRadios day={days[0]} picked={picks[days[0].id] ?? ""} onPick={(id) => setPicks((p) => ({ ...p, [days[0].id]: id }))} />
-      ) : (
-        <ul className="flex flex-col gap-3">
+      {!single && (
+        <ul className="flex flex-col gap-2">
           {days.map((d) => {
             const on = joined.has(d.id);
             return (
-              <li key={d.id} className={`flex flex-col gap-3 rounded-xl border p-4 ${on ? "border-brand" : "border-line"}`}>
-                <label className="flex cursor-pointer items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={on}
-                    disabled={allRequired}
-                    onChange={() => toggleDay(d.id)}
-                    className="mt-0.5 h-5 w-5 accent-brand"
-                  />
-                  <span className="flex flex-col">
+              <li key={d.id}>
+                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand ${on ? "border-brand bg-brand-soft" : "border-line bg-white"}`}>
+                  <input type="checkbox" checked={on} disabled={allRequired} onChange={() => toggleDay(d.id)} className="mt-0.5 h-5 w-5 accent-brand" />
+                  <span className="flex flex-1 flex-col">
                     <span className="font-bold">{d.label}</span>
-                    <span className="text-[13px] text-muted">{d.timeText}</span>
+                    <span className="text-[13px] text-body">{d.timeText}</span>
+                    <span className="text-[13px] text-muted">{d.payText}</span>
                   </span>
+                  <span className={`text-[13px] ${d.remaining > 0 ? "text-body" : "font-bold text-warn"}`}>{d.remaining > 0 ? `${d.remaining}자리 남음` : "대기 신청"}</span>
                 </label>
-                {on && <PositionRadios day={d} picked={picks[d.id] ?? ""} onPick={(id) => setPicks((p) => ({ ...p, [d.id]: id }))} />}
               </li>
             );
           })}
         </ul>
       )}
 
-      {!ready && (
-        <p className="text-[13px] text-muted">
-          {chosen.length === 0 ? "참여할 날짜를 골라 주세요." : `${missingRole.map((d) => d.label).join(", ")}의 역할을 골라 주세요.`}
-        </p>
-      )}
-      <SubmitButton pendingText="신청하는 중…" className="h-12 text-[15px]" disabled={!ready}>
+      {chosen.length === 0 && <p className="text-[13px] text-muted">참여할 날짜를 골라 주세요.</p>}
+      <p className="text-[13px] text-muted">역할(감독관·안내 등)은 대표님이 신청자를 보고 정해요.</p>
+      <SubmitButton pendingText="신청하는 중…" className="h-12 text-[15px]" disabled={chosen.length === 0}>
         {single || chosen.length === 0 ? "신청하기" : `${chosen.length}일 신청하기`}
       </SubmitButton>
       <Message state={state} />

@@ -3,8 +3,8 @@
 import { useActionState, useState } from "react";
 import { SubmitButton } from "@/components/submit-button";
 import { formatWon } from "@/lib/format";
-import { PAY_TYPE_LABEL, type PayRules, type PayType } from "@/lib/pay";
-import { createRole, setRoleActive, updateRole, type RateState } from "./actions";
+import { calculatePay, PAY_TYPE_LABEL, type PayRules, type PayType } from "@/lib/pay";
+import { createRole, setRateDefault, setRoleActive, updateRole, type RateState } from "./actions";
 
 export interface RoleRow {
   id: string;
@@ -16,7 +16,10 @@ export interface RoleRow {
   overtime_rate: number | null;
   sort_order: number;
   is_active: boolean;
+  default_for: "setup" | "main" | "other" | null;
 }
+
+const DEFAULT_LABEL = { setup: "세팅일 기본", main: "진행일 기본" } as const;
 
 const fieldClass = "h-11 w-full rounded-lg border border-field bg-white px-3 text-sm";
 
@@ -72,9 +75,9 @@ function RoleFields({
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-[2_1_160px] flex-col gap-1.5">
           <label htmlFor={`${idPrefix}-name`} className="text-sm font-bold">
-            역할 이름
+            이름
           </label>
-          <input id={`${idPrefix}-name`} name="name" required maxLength={30} defaultValue={role?.name} placeholder="예: 감독관" className={fieldClass} />
+          <input id={`${idPrefix}-name`} name="name" required maxLength={30} defaultValue={role?.name} placeholder="예: 필기 세팅, 면접 진행(종일)" className={fieldClass} />
         </div>
         <div className="flex flex-[1_1_140px] flex-col gap-1.5">
           <label htmlFor={`${idPrefix}-rate`} className="text-sm font-bold">
@@ -126,7 +129,7 @@ function RoleFields({
           <label htmlFor={`${idPrefix}-desc`} className="text-sm font-bold">
             설명
           </label>
-          <input id={`${idPrefix}-desc`} name="description" maxLength={200} defaultValue={role?.description} placeholder="예: 고사실 감독" className={fieldClass} />
+          <input id={`${idPrefix}-desc`} name="description" maxLength={200} defaultValue={role?.description} placeholder="예: 필기시험 세팅 기준 4시간" className={fieldClass} />
         </div>
         <div className="flex w-20 flex-col gap-1.5">
           <label htmlFor={`${idPrefix}-order`} className="text-sm font-bold">
@@ -158,22 +161,40 @@ export function CreateRoleForm({ nextOrder, rules }: { nextOrder: number; rules:
     <form action={action} className="flex flex-col gap-3">
       <RoleFields idPrefix="new" nextOrder={nextOrder} rules={rules} />
       <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton pendingText="추가 중…">역할 추가</SubmitButton>
+        <SubmitButton pendingText="추가 중…">단가 추가</SubmitButton>
         <Message state={state} />
       </div>
     </form>
   );
 }
 
-function roleSummary(role: RoleRow, rules: PayRules): string {
+// 실제로 받게 될 금액 예시 (예: 4시간 44,000원 · 8시간 88,000원)
+function examples(role: RoleRow, rules: PayRules): string {
+  const rate = { payType: role.pay_type, rate: role.default_rate, minPaidHours: role.min_paid_hours, overtimeRate: role.overtime_rate };
   if (role.pay_type === "daily") {
-    return role.overtime_rate !== null
-      ? `초과 1시간당 ${formatWon(role.overtime_rate)}`
-      : "초과 금액 미정 (정산 때 직접 입력)";
+    return `하루 ${formatWon(role.default_rate)}${role.overtime_rate !== null ? ` · 초과 1시간당 ${formatWon(role.overtime_rate)}` : ""}`;
   }
+  const at = (h: number) => calculatePay(rate, rules, { scheduledMinutes: h * 60, overtimeMinutes: 0 }).total;
   const min = role.min_paid_hours ?? rules.defaultMinPaidHours;
-  const overtime = formatWon(Math.floor(role.default_rate * rules.overtimeMultiplier));
-  return `${min > 0 ? `최소 ${min}시간 보장 · ` : ""}초과 1시간당 ${overtime} (${rules.overtimeMultiplier}배)`;
+  return `4시간 ${formatWon(at(4))} · 8시간 ${formatWon(at(8))}${min > 0 ? ` · 최소 ${min}시간 보장` : ""} · 초과 ${rules.overtimeMultiplier}배`;
+}
+
+function DefaultButton({ role, kind }: { role: RoleRow; kind: "setup" | "main" }) {
+  const on = role.default_for === kind;
+  return (
+    <form action={setRateDefault}>
+      <input type="hidden" name="id" value={role.id} />
+      <input type="hidden" name="kind" value={kind} />
+      <input type="hidden" name="on" value={on ? "false" : "true"} />
+      <button
+        type="submit"
+        aria-pressed={on}
+        className={`h-9 rounded-md border px-3 text-sm font-bold ${on ? "border-brand bg-brand-soft text-brand-strong" : "border-field bg-white text-body hover:bg-ground"}`}
+      >
+        {on ? `★ ${DEFAULT_LABEL[kind]}` : `☆ ${DEFAULT_LABEL[kind]}으로`}
+      </button>
+    </form>
+  );
 }
 
 // 단가표 한 줄. 평소에는 값만 보이고, 고치기를 누르면 입력칸이 열린다.
@@ -191,17 +212,26 @@ export function RoleItem({ role, rules }: { role: RoleRow; rules: PayRules }) {
         <div className="flex flex-wrap items-center gap-3">
           <span className="w-8 text-right text-sm text-muted">{role.sort_order}</span>
           <div className="flex min-w-0 flex-[1_1_220px] flex-col gap-0.5">
-            <span className="flex items-center gap-2 font-bold">
+            <span className="flex flex-wrap items-center gap-2 font-bold">
               {role.name}
+              {(role.default_for === "setup" || role.default_for === "main") && (
+                <span className="rounded bg-brand-soft px-1.5 text-[11px] font-bold text-brand-strong">★ {DEFAULT_LABEL[role.default_for]}</span>
+              )}
               {!role.is_active && <span className="rounded border border-line px-1.5 text-[11px] font-bold text-muted">숨김</span>}
             </span>
-            <span className="text-[13px] text-muted">{roleSummary(role, rules)}</span>
+            <span className="text-[13px] text-body">{examples(role, rules)}</span>
             {role.description && <span className="text-[13px] text-muted">{role.description}</span>}
           </div>
           <span className="text-[15px] font-bold">
             {PAY_TYPE_LABEL[role.pay_type]} {formatWon(role.default_rate)}
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {role.is_active && (
+              <>
+                <DefaultButton role={role} kind="setup" />
+                <DefaultButton role={role} kind="main" />
+              </>
+            )}
             <button
               type="button"
               onClick={() => setEditing(true)}

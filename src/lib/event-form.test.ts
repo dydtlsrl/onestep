@@ -4,23 +4,26 @@ import { firstIssueMessage, readEventForm, toEventRpcArgs } from "./event-form";
 const setupDay = {
   dayDate: "2026-11-07",
   kind: "setup",
-  recruit: "assign",
   gatherTime: "",
   startTime: "14:00",
   endTime: "18:00",
-  positions: [{ roleName: "세팅 인력", payType: "hourly", rate: "12000", minPaidHours: "", overtimeRate: "", headcount: "2" }],
+  headcount: "4",
+  payType: "hourly",
+  rate: "11000",
+  minPaidHours: "4",
+  overtimeRate: "99",
 };
 const examDay = {
   dayDate: "2026-11-08",
   kind: "main",
-  recruit: "open",
   gatherTime: "07:30",
   startTime: "08:00",
   endTime: "13:00",
-  positions: [
-    { roleName: "감독관", payType: "hourly", rate: "12000", minPaidHours: "4", overtimeRate: "99", headcount: "8" },
-    { roleName: "안내", payType: "daily", rate: 110000, minPaidHours: 3, overtimeRate: 15000, headcount: 4 },
-  ],
+  headcount: 24,
+  payType: "daily",
+  rate: 110000,
+  minPaidHours: 3,
+  overtimeRate: 15000,
 };
 
 function form(overrides: Record<string, string> = {}) {
@@ -59,21 +62,19 @@ describe("readEventForm", () => {
     const args = toEventRpcArgs(parsed.data);
     expect(args.event.title).toBe("대기업 공채 필기시험");
     expect(args.event.apply_deadline).toBe("2026-11-03T18:00:00+09:00");
+    expect(args.event.all_days_required).toBe(true);
     expect(args.days).toHaveLength(2);
-    expect(args.days[0]).toMatchObject({ day_date: "2026-11-07", kind: "setup", recruit: "assign", gather_time: "" });
-    expect(args.days[1].positions[0]).toMatchObject({ role_name: "감독관", pay_type: "hourly", rate: 12000, min_paid_hours: 4, overtime_rate: null, headcount: 8 });
-    expect(args.days[1].positions[1]).toMatchObject({ pay_type: "daily", min_paid_hours: null, overtime_rate: 15000 });
+    expect(args.days[0]).toMatchObject({ day_date: "2026-11-07", kind: "setup", gather_time: "", headcount: 4, pay_type: "hourly", rate: 11000, min_paid_hours: 4, overtime_rate: null });
+    expect(args.days[1]).toMatchObject({ pay_type: "daily", rate: 110000, min_paid_hours: null, overtime_rate: 15000 });
     expect(args.extras).toEqual([
       { type: "transport", tier: "all", amount: 10000, per_day: true },
       { type: "regional", tier: "core", amount: 30000, per_day: false },
     ]);
   });
 
-  it("공개 모집 날짜가 하나뿐이면 '모든 날짜 참여 필수'는 끈다", () => {
-    const parsed = readEventForm(form());
+  it("날짜가 하나면 '모든 날짜 참여 필수'는 끈다", () => {
+    const parsed = readEventForm(form({ days: JSON.stringify([examDay]) }));
     expect(parsed.success && toEventRpcArgs(parsed.data).event.all_days_required).toBe(false);
-    const twoOpen = readEventForm(form({ days: JSON.stringify([{ ...setupDay, recruit: "open" }, examDay]) }));
-    expect(twoOpen.success && toEventRpcArgs(twoOpen.data).event.all_days_required).toBe(true);
   });
 
   it("어느 날짜의 문제인지 알려 준다", () => {
@@ -82,9 +83,9 @@ describe("readEventForm", () => {
     if (!parsed.success) expect(firstIssueMessage(parsed.error)).toBe("2일차: 끝나는 시간이 시작 시간보다 늦어야 해요.");
   });
 
-  it("날짜나 역할이 없거나 톡방 링크가 https가 아니면 실패", () => {
+  it("날짜가 없거나, 인원이 0이거나, 톡방 링크가 https가 아니면 실패", () => {
     expect(readEventForm(form({ days: "[]" })).success).toBe(false);
-    expect(readEventForm(form({ days: JSON.stringify([{ ...examDay, positions: [] }]) })).success).toBe(false);
+    expect(readEventForm(form({ days: JSON.stringify([{ ...examDay, headcount: 0 }]) })).success).toBe(false);
     expect(readEventForm(form({ chatLink: "http://open.kakao.com" })).success).toBe(false);
     expect(readEventForm(form({ days: "깨진 값" })).success).toBe(false);
   });

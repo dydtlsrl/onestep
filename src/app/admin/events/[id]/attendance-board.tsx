@@ -11,7 +11,8 @@ export interface AttendanceRow {
   id: string;
   name: string;
   tier: MemberTier;
-  positionName: string;
+  roleName: string; // 대표가 정한 역할 (비면 미정)
+  rateText: string; // 적용 단가 (예: 시급 13,000원)
   rate: RoleRate;
   attendance: Attendance;
   overtimeMinutes: number;
@@ -56,7 +57,7 @@ function Row({ eventId, row, rules, scheduled }: { eventId: string; row: Attenda
           <span className="font-bold">
             {row.name} <span className="text-[12px] font-normal text-muted">{TIER_LABEL[row.tier]}</span>
           </span>
-          <span className="text-[13px] text-muted">{row.positionName}</span>
+          <span className="text-[13px] text-muted">{row.roleName || "역할 미정"} · {row.rateText}</span>
         </div>
         <fieldset className="flex flex-wrap gap-1.5">
           <legend className="sr-only">{row.name} 출석</legend>

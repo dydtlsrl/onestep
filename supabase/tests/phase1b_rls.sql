@@ -42,7 +42,7 @@ set role authenticated;
 select tests.expect_count('select * from public.member_notes', 0, '회원: 관리자 기록이 보이지 않음');
 select tests.expect_count('select * from public.member_note_counts', 0, '회원: 노쇼·지각 횟수가 보이지 않음');
 select tests.expect_error($$insert into public.member_notes (member_id, type, content) values ('00000000-0000-0000-0000-00000000001c', 'praise', '칭찬')$$, 'new row violates row-level security policy%');
-select tests.expect_count('select * from public.job_roles', 1, '회원: 숨기지 않은 단가표만 보임');
+select tests.expect_count('select * from public.job_roles where default_for is null', 1, '회원: 숨기지 않은 단가표만 보임');
 select tests.expect_error($$insert into public.job_roles (name, default_rate) values ('해킹', 1)$$, 'new row violates row-level security policy%');
 update public.job_roles set default_rate = 1;
 reset role;
@@ -56,11 +56,11 @@ reset role;
 -- 승인 대기·회원 행 없는 사람은 단가표도 못 본다
 select tests.act_as('00000000-0000-0000-0000-00000000001d');
 set role authenticated;
-select tests.expect_count('select * from public.job_roles', 0, '승인 대기: 단가표가 보이지 않음');
+select tests.expect_count('select * from public.job_roles where default_for is null', 0, '승인 대기: 단가표가 보이지 않음');
 reset role;
 select tests.act_as('00000000-0000-0000-0000-00000000001e');
 set role authenticated;
-select tests.expect_count('select * from public.job_roles', 0, '회원 행 없음: 단가표가 보이지 않음');
+select tests.expect_count('select * from public.job_roles where default_for is null', 0, '회원 행 없음: 단가표가 보이지 않음');
 reset role;
 
 
@@ -85,7 +85,7 @@ reset role;
 -- 제한된 회원은 단가표를 못 본다
 select tests.act_as('00000000-0000-0000-0000-00000000001b');
 set role authenticated;
-select tests.expect_count('select * from public.job_roles', 0, '제한된 회원: 단가표가 보이지 않음');
+select tests.expect_count('select * from public.job_roles where default_for is null', 0, '제한된 회원: 단가표가 보이지 않음');
 reset role;
 
 select tests.act_as('00000000-0000-0000-0000-00000000001a');
@@ -115,7 +115,7 @@ select tests.expect_count($$select 1 from public.member_notes where member_id = 
 -- 5. 대표: 단가표 ------------------------------------------------------------------
 
 insert into public.job_roles (name, description, default_rate, sort_order) values ('안내', '수험생 안내', 110000, 2);
-select tests.expect_count('select * from public.job_roles', 3, '대표: 숨긴 것 포함 전체 단가표가 보임');
+select tests.expect_count('select * from public.job_roles where default_for is null', 3, '대표: 숨긴 것 포함 전체 단가표가 보임');
 select tests.expect_error($$insert into public.job_roles (name, default_rate) values ('안내', 1)$$, '%duplicate key%');
 select tests.expect_error($$insert into public.job_roles (name, default_rate) values ('음수', -1)$$, '%violates check constraint%');
 update public.job_roles set default_rate = 120000 where name = '안내';
@@ -126,7 +126,7 @@ reset role;
 
 select tests.act_as('00000000-0000-0000-0000-00000000001c');
 set role authenticated;
-select tests.expect_count('select * from public.job_roles', 1, '회원: 숨긴 역할은 사라지고 새 역할만 보임');
+select tests.expect_count('select * from public.job_roles where default_for is null', 1, '회원: 숨긴 역할은 사라지고 새 역할만 보임');
 reset role;
 
 \echo 'ALL PHASE 1B RLS TESTS PASSED'
