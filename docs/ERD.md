@@ -24,6 +24,7 @@ erDiagram
     applications ||--o| contracts : "계약"
     contract_templates ||--o{ contracts : "양식"
     applications ||--o| payments : "정산"
+    payments ||--o{ payment_extras : "추가 지급"
     profiles ||--o{ notifications : "받음"
 
     profiles {
@@ -86,7 +87,7 @@ erDiagram
         uuid id PK
         text name "역할 이름"
         text description "설명"
-        int default_rate "기본 단가 (원)"
+        int default_rate "인력 1회 보수 (원, 고객사 청구 단가 아님)"
         int sort_order "정렬 순서"
         boolean is_active "사용 여부"
         timestamptz created_at
@@ -182,9 +183,8 @@ erDiagram
         uuid application_id FK, UK
         uuid member_id FK
         uuid event_id FK
-        int base_amount "기본 금액"
-        int adjustment_amount "추가/차감"
-        text adjustment_reason
+        int base_amount "기본 보수"
+        int extra_amount "추가 지급 합계"
         int gross_amount "지급 총액"
         enum tax_type "other_income, business_income, none, custom"
         numeric tax_rate "적용 세율 (저장 당시)"
@@ -196,6 +196,16 @@ erDiagram
         enum status "scheduled, held, paid, cancelled"
         timestamptz paid_at
         uuid paid_by FK
+        timestamptz created_at
+    }
+
+    payment_extras {
+        uuid id PK
+        uuid payment_id FK
+        enum type "transport, regional, overtime, other"
+        int amount "금액 (원)"
+        text memo "사유 (예: 연장 1시간)"
+        uuid created_by FK
         timestamptz created_at
     }
 
@@ -268,6 +278,7 @@ erDiagram
 | `contract_templates` | 전체 | 불가 | 불가 |
 | `contracts` | 전체 | 자기 계약 읽기·서명 | 불가 |
 | `payments` | 전체 | 자기 내역 읽기 | 불가 |
+| `payment_extras` | 전체 | 자기 지급 항목의 것 읽기 | 불가 |
 | `notifications` | 생성 | 자기 알림 읽기·읽음 처리 | 불가 |
 | `app_settings` | 전체 | 불가 | 불가 |
 | `app_settings_history` | 읽기 | 불가 | 불가 |
