@@ -48,8 +48,12 @@
 ```bash
 git clone https://github.com/dydtlsrl/onestep.git
 cd onestep
-npm install
+git switch claude/workforce-management-app-35e05f
+npm ci
 ```
+- `npm ci`는 `package-lock.json`에 적힌 버전 그대로 라이브러리를 설치한다. 라이브러리는 이 폴더의 `node_modules`에만 들어가므로 Python처럼 가상환경을 따로 만들 필요가 없다.
+- 새 라이브러리를 추가할 때만 `npm install <이름>`을 쓴다.
+- 여러 프로젝트에서 Node 버전이 다르면 [fnm](https://github.com/Schniz/fnm)을 쓴다. 이 폴더의 `.nvmrc`(Node 22)를 읽어 버전을 맞춰 준다.
 
 ### 3. Supabase 프로젝트 만들기
 1. [supabase.com](https://supabase.com)에서 New project를 누른다. 지역(Region)은 **Northeast Asia (Seoul)** 를 고른다.
