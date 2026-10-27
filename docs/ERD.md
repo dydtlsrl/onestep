@@ -88,7 +88,10 @@ erDiagram
         uuid id PK
         text name "역할 이름"
         text description "설명"
-        int default_rate "인력 1회 보수 (원, 고객사 청구 단가 아님)"
+        enum pay_type "hourly, daily (시급·일급)"
+        int default_rate "시급은 1시간, 일급은 1회 보수 (원, 고객사 청구 단가 아님)"
+        numeric min_paid_hours "시급 최소 보장 시간 (비우면 공통값)"
+        int overtime_rate "일급 초과 1시간당 금액"
         int sort_order "정렬 순서"
         boolean is_active "사용 여부"
         timestamptz created_at
@@ -319,4 +322,5 @@ erDiagram
 | `set_member_tier(id, tier)` | 대표 | 등급 변경 (활동·제한 회원) |
 | `restrict_member(id, reason)` | 대표 | 활동 제한. 사유 필수, 대표 계정은 불가. 관리자 기록에 "주의"로 자동 기록 |
 | `unrestrict_member(id)` | 대표 | 제한 해제 |
+| `update_pay_rules(...)` | 대표 | 보수 계산 규칙(초과 배율, 계산 단위·단위 미만 처리, 기본 최소 보장 시간) 변경. 값 검사, 버전 증가, `app_settings_history`에 이력 |
 | `is_admin()`, `is_active_member()` | 권한 규칙 안에서 | 지금 사람이 활동 중인 대표/회원인지 |

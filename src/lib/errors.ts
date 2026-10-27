@@ -15,6 +15,7 @@ const MESSAGES: Record<string, string> = {
   CANNOT_TARGET_ADMIN: "대표 계정은 제한할 수 없어요.",
   NOT_ACTIVE: "활동 중인 회원만 제한할 수 있어요. 화면을 새로고침해 주세요.",
   NOT_RESTRICTED: "제한된 회원이 아니에요. 화면을 새로고침해 주세요.",
+  SETTING_NOT_FOUND: "계산 규칙이 아직 없어요. 세 번째 마이그레이션 파일을 적용했는지 확인해 주세요.",
 };
 
 export function messageForError(error: { message?: string } | null | undefined): string {
