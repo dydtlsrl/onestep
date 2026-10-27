@@ -5,8 +5,8 @@ import { getCurrentMember, type MemberStatus } from "@/lib/auth";
 
 const COPY: Record<Exclude<MemberStatus, "active">, { title: string; body: string }> = {
   pending: {
-    title: "가입 신청을 받았어요",
-    body: "대표님이 신청 내용을 확인하고 있어요. 승인되면 이 화면에서 바로 일정을 볼 수 있어요.",
+    title: "가입 신청이 완료되었어요",
+    body: "대표님이 신청 내용을 확인한 뒤 승인하면 이용할 수 있어요. 승인 여부는 이 주소에 다시 접속하면 확인할 수 있어요.",
   },
   rejected: {
     title: "가입이 승인되지 않았어요",
@@ -36,7 +36,7 @@ export default async function PendingPage() {
       <Card>
         <h1 className="text-xl font-bold">{copy.title}</h1>
         <p className="text-[15px] leading-relaxed text-body">{copy.body}</p>
-        {profile.status === "pending" && <Notice>{profile.name}님의 신청서가 접수되어 있어요.</Notice>}
+        {profile.status === "pending" && <Notice>{profile.name}님의 신청서를 대표님이 확인하고 있어요.</Notice>}
       </Card>
       <SignOutButton />
     </PageShell>
