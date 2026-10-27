@@ -3,7 +3,7 @@
 | 항목 | 내용 |
 |---|---|
 | 문서 버전 | v0.1 (초안) |
-| 최종 수정 | 2026-10-27 (2단계: 여러 날짜 일정, 날짜만 골라 신청, 역할·단가는 사람마다) |
+| 최종 수정 | 2026-10-27 (3·4단계: 정산 정보 암호화, 전자계약, 정산) |
 | 데이터베이스 | PostgreSQL (Supabase) |
 | 관련 문서 | [PRD](./PRD.md) · [기술 스택](./TECH_STACK.md) |
 
@@ -22,10 +22,12 @@ erDiagram
     events ||--o{ applications : "신청 받음"
     event_days ||--o{ applications : "날짜별 신청"
     profiles ||--o{ applications : "신청함"
-    applications ||--o| contracts : "계약"
+    events ||--o{ contracts : "계약 (사람당 유효 1장)"
+    profiles ||--o{ contracts : "서명함"
     contract_templates ||--o{ contracts : "양식"
-    applications ||--o| payments : "정산"
-    payments ||--o{ payment_extras : "추가 지급"
+    events ||--o{ payments : "정산 (사람당 1건)"
+    profiles ||--o{ payments : "받음"
+    payments ||--|{ payment_items : "지급 항목"
     profiles ||--o{ notifications : "받음"
 
     profiles {
@@ -53,11 +55,11 @@ erDiagram
 
     member_private {
         uuid member_id PK, FK "회원"
-        text rrn_encrypted "주민번호 (암호문)"
+        text rrn_enc "주민번호 (암호문, v1:...)"
         text rrn_masked "주민번호 표시용 (900101-1******)"
         text bank_name "은행"
-        text account_encrypted "계좌번호 (암호문)"
-        text account_masked "계좌번호 표시용"
+        text account_enc "계좌번호 (암호문, v1:...)"
+        text account_masked "계좌번호 표시용 (****1234)"
         text account_holder "예금주"
         text address "주소"
         timestamptz updated_at
@@ -174,51 +176,55 @@ erDiagram
 
     contract_templates {
         uuid id PK
-        text name "양식 이름"
-        int version "버전"
-        text body "계약서 문구 (자리표시자 포함)"
-        boolean is_active "현재 사용 양식"
+        int version UK "버전 (고칠 때마다 새 줄)"
+        text title "계약서 제목"
+        text body "계약서 문구 ({{빈칸}} 포함)"
+        uuid created_by FK
         timestamptz created_at
     }
 
     contracts {
         uuid id PK
-        uuid application_id FK, UK
-        uuid member_id FK
         uuid event_id FK
+        uuid member_id FK
         uuid template_id FK
-        text body_snapshot "발송 당시 계약서 전문"
+        int template_version "보낼 때의 양식 버전"
         enum status "requested, signed, voided"
+        text title
+        text body "보낼 때 빈칸을 채운 계약서 전문"
+        jsonb terms "회사·회원·날짜별 보수·합계·지급일 (보낼 때 값)"
         timestamptz requested_at
+        timestamptz notified_at "마지막 알림"
         timestamptz signed_at
-        text signature_path "서명 이미지 위치"
-        text pdf_path "PDF 위치"
-        text document_hash "문서 해시 (SHA-256)"
-        text signer_ip
-        text signer_user_agent
+        text signature "서명 이미지 (PNG data URL)"
+        text signer_rrn_masked "서명 때의 가린 주민번호"
+        text signer_address "서명 때의 주소"
+        text sign_ip
+        text sign_user_agent
+        text document_hash "문서 해시 (SHA-256, DB가 계산)"
         timestamptz voided_at
         text void_reason
     }
 
     payments {
         uuid id PK
-        uuid application_id FK, UK
-        uuid member_id FK
         uuid event_id FK
-        int base_amount "기본 보수"
-        int extra_amount "추가 지급 합계"
-        int gross_amount "지급 총액"
-        enum tax_type "other_income, business_income, none, custom"
-        numeric tax_rate "적용 세율 (저장 당시)"
-        int tax_rule_version "적용 계산 규칙 버전"
+        uuid member_id FK
+        date pay_date "지급 예정일"
+        enum status "draft, scheduled, held, paid, cancelled"
+        int work_amount "근무·초과 보수"
+        int extra_amount "교통비·지방비·기타"
+        int gross "세전 합계"
+        text tax_type "unset, other, business, none (저장 당시)"
+        jsonb tax_rule "세율·과세최저한·교통비 포함 여부 (저장 당시)"
         int income_tax "소득세"
         int local_tax "지방소득세"
-        int net_amount "실지급액"
-        date pay_date "지급일"
-        enum status "scheduled, held, paid, cancelled"
+        int net "실지급액"
+        boolean edited "대표가 직접 고침"
+        text memo
+        text held_reason
+        timestamptz confirmed_at
         timestamptz paid_at
-        uuid paid_by FK
-        timestamptz created_at
     }
 
     event_extra_rules {
@@ -230,15 +236,14 @@ erDiagram
         boolean per_day "참여한 날마다(true) / 일정당 한 번(false)"
     }
 
-    payment_extras {
+    payment_items {
         uuid id PK
         uuid payment_id FK
-        enum type "transport, regional, overtime, other"
-        enum source "event_rule, manual"
+        text kind "work, overtime, transport, regional, other"
+        text label "예: 11/7(토) 세팅 · 시급 11,000원 × 4시간"
         int amount "금액 (원)"
-        text memo "사유 (예: 연장 1시간)"
-        uuid created_by FK
-        timestamptz created_at
+        uuid day_id FK "관련 날짜 (없을 수 있음)"
+        int sort_order
     }
 
     notifications {
@@ -279,9 +284,9 @@ erDiagram
 |---|---|---|
 | `event_days` | `rate`, `pay_type` 등 (날짜별) | 단가표·기본 시급을 바꿔도 지난 일정 단가는 그대로 |
 | `event_extra_rules` | `amount` | 지방비 기본표를 바꿔도 이미 등록한 일정의 금액은 그대로 |
-| `payment_extras` | `amount`, `source` | 일정의 기본값을 나중에 바꿔도 이미 만든 지급 항목은 그대로. 자동으로 붙은 것인지 대표가 넣은 것인지 구분 |
-| `contracts` | `body_snapshot`, `document_hash` | 양식을 고쳐도 서명한 계약서 내용은 그대로, 위·변조 확인 가능 |
-| `payments` | `tax_type`, `tax_rate`, `tax_rule_version`, 세액 | 세목·계산 규칙을 바꿔도 과거 지급 내역은 그대로 |
+| `payment_items` | `label`, `amount` | 일정 단가·추가 지급을 나중에 바꿔도 이미 만든 지급 항목은 그대로 |
+| `contracts` | `body`, `terms`, `document_hash` | 양식·회사 정보·단가를 고쳐도 보낸 계약서 내용은 그대로, 위·변조 확인 가능 |
+| `payments` | `tax_type`, `tax_rule`, 세액, `edited` | 세목·계산 규칙을 바꿔도 과거 지급 내역은 그대로. 대표가 직접 고친 정산은 자동 재계산이 덮어쓰지 않음 |
 
 ### 2.3 상태값
 
@@ -290,14 +295,15 @@ erDiagram
 | 회원 `status` | `pending`(승인 대기) → `active`(활동) 또는 `rejected`(거절). `active` ↔ `restricted`(제한). 탈퇴 시 `withdrawn` |
 | 일정 `status` | `draft` → `open_core` → `open_all` → `closed` → `completed`. 어느 단계에서든 `cancelled` |
 | 신청 `status` | `applied` → `selected` / `waitlisted` / `rejected`. `waitlisted` → `selected` 가능. 취소 시 `cancelled` |
-| 계약 `status` | `requested` → `signed`. 확정 취소 시 `voided` |
-| 지급 `status` | `scheduled` → `paid`. 필요 시 `held`(보류), `cancelled` |
+| 계약 `status` | `requested` → `signed`. 대표가 무효로 하거나, 확정이 모두 풀리거나, 일정이 취소되면 `voided` |
+| 지급 `status` | 세금 미정이면 `draft`(확정 전), 정해지면 `scheduled` → `paid`. `held`(보류) ↔ `scheduled`. 일정 취소·확정 취소 때 지급 전 정산은 `cancelled` |
 
 ### 2.4 제약 조건
 - `profiles.phone` 중복 불가: 한 사람이 카카오·구글로 두 번 가입하는 것을 막는다.
 - `applications (day_id, member_id)` 중복 불가: 한 날짜에 한 번만 신청 (여러 날짜면 날짜마다 한 줄)
 - 신청의 역할은 같은 날짜의 것, 날짜는 같은 일정의 것만 고를 수 있다 (복합 외래 키)
-- `contracts.application_id`, `payments.application_id` 중복 불가: 확정 1건당 계약 1건, 지급 1건
+- 계약은 일정 하나에 회원 한 명당 유효한 것(`voided` 아닌 것) 하나 (`contracts_active_key`). 정산은 일정 하나에 회원 한 명당 하나 (`payments (event_id, member_id)`)
+- 서명 완료 계약은 서명 이미지·시각·해시가 반드시 있다. 정산은 `gross = work + extra`, `net = gross - 세금 ≥ 0`
 - 금액은 모두 원 단위 정수(`int`)로 저장한다. 소수 계산 오차를 피하기 위해서다.
 
 ## 3. 접근 권한 (RLS)
@@ -305,7 +311,7 @@ erDiagram
 | 테이블 | 관리자 | 회원 본인 | 다른 회원 |
 |---|---|---|---|
 | `profiles` | 전체 읽기·쓰기 | 자기 행 읽기, 일부 수정 (이름·연락처·지역·경력) | 불가 |
-| `member_private` | 서버를 통해서만 (열람 기록) | 서버를 통해 자기 정보 입력·수정, 마스킹 값만 읽기 | 불가 |
+| `member_private` | 가린 값만 읽기. 암호문은 `admin_private_secrets` 함수로만 (열람 기록) | 서버에서 암호화해 자기 정보 입력·수정, 가린 값만 읽기 | 불가 |
 | `invites` | 전체 | 불가 (가입 시 서버가 코드 검증) | 불가 |
 | `member_notes` | 전체 | **불가** | 불가 |
 | `job_roles` | 전체 | 읽기 | 읽기 |
@@ -315,10 +321,10 @@ erDiagram
 | `event_days` | 전체 | 볼 수 있는 일정의 것만 읽기 | 같음 |
 | `event_extra_rules` | 전체 | 볼 수 있는 일정의 것만 읽기 (화면에는 자기 등급 금액만) | 같음 |
 | `applications` | 전체 | 자기 신청 읽기. 신청·취소는 함수로만 | 불가 (날짜별 확정 인원만 `day_selected_counts`로 공개) |
-| `contract_templates` | 전체 | 불가 | 불가 |
-| `contracts` | 전체 | 자기 계약 읽기·서명 | 불가 |
-| `payments` | 전체 | 자기 내역 읽기 | 불가 |
-| `payment_extras` | 전체 | 자기 지급 항목의 것 읽기 | 불가 |
+| `contract_templates` | 읽기 (새 버전은 함수로) | 불가 | 불가 |
+| `contracts` | 읽기 (보내기·무효는 함수로) | 자기 계약 읽기, 서명은 함수로 | 불가 |
+| `payments` | 읽기 (저장·상태 변경은 함수로) | 자기 내역 읽기 (확정 전 금액은 화면에서 숨김) | 불가 |
+| `payment_items` | 읽기 | 자기 정산의 항목 읽기 | 불가 |
 | `notifications` | 생성 | 자기 알림 읽기·읽음 처리 | 불가 |
 | `app_settings` | 전체 | 보수 계산 규칙(`pay_rules`)만 읽기 (예상 보수 표시용) | 같음 |
 | `app_settings_history` | 읽기 | 불가 | 불가 |
@@ -326,7 +332,7 @@ erDiagram
 | `member_note_counts` | 읽기 | 불가 (0행) | 불가 |
 | `member_participation` | 읽기 | 자기 행만 | 불가 |
 
-`member_private`는 행 단위 보안만으로 암호문·마스킹 컬럼의 읽기 권한을 나눌 수 없다. 회원에게 원본 테이블의 직접 조회 권한을 주지 않고, 서버 경로 또는 필요한 마스킹 컬럼만 노출하는 별도 인터페이스로 제공한다. 관리자 키는 서버에서만 사용하고, 서버 경로에서 대표 권한 확인과 열람 기록을 남긴다.
+`member_private`는 컬럼 권한으로 암호문 칸(`rrn_enc`, `account_enc`)의 읽기를 아무에게도 주지 않는다. 대표는 `admin_private_secrets(member_ids, purpose)`로만 암호문을 받고 그때마다 `audit_logs`에 목적(보기·이체·계약서)이 남는다. 회원은 `my_private_secrets()`로 자기 것만 받는다. 암호를 푸는 키(`PII_ENCRYPTION_KEY`)는 앱 서버 환경변수에만 있어 DB만으로는 원문을 볼 수 없다. secret·service_role 키는 쓰지 않는다.
 
 **일정 공개 규칙**
 - 회원 상태가 `active`가 아니면 일정을 하나도 볼 수 없다.
@@ -375,3 +381,25 @@ erDiagram
 | `day_selected_counts(event_ids)` | 활동 회원 | 볼 수 있는 일정의 날짜별 확정 인원 (남은 자리 표시) |
 | `update_pay_rules(..., default_hourly_rate)` | 대표 | 공통 계산 규칙에 기본 시급 추가. 비우면 지금 값 유지 |
 | `can_view_event(id, status)` | 권한 규칙 안에서 | 위의 일정 공개 규칙 |
+
+## 6. DB 함수 (3·4단계: 계약·정산·설정)
+`20261104000000_contracts_payments.sql`. 금액·계약 문구는 앱 서버가 단가표·출석·설정으로 만들어 넘기고, 함수는 대표인지·상태가 맞는지·합계가 맞는지 다시 확인한다.
+
+| 함수 | 누가 | 하는 일 |
+|---|---|---|
+| `update_setting(key, value, reason)` | 대표 | `company`(회사 정보), `contract`(주민번호 표시), `tax`(세목·과세최저한·교통비 포함) 저장. 값 모양 확인, 버전·이력·기록 |
+| `admin_private_secrets(member_ids, purpose)` | 대표 | 암호문 받기 (`view`, `transfer`, `contract`). 열람 기록 |
+| `my_private_secrets()` | 회원 | 자기 암호문 받기 (계약서 주민번호 전체 표시용) |
+| `save_contract_template(title, body)` | 대표 | 양식을 새 버전으로 저장 |
+| `request_contract(event, member, template, title, body, terms)` | 대표 | 확정자에게 계약서 보내기 + 알림. 공개 전·취소 일정 불가, 이미 유효한 계약이 있으면 `CONTRACT_EXISTS` |
+| `remind_contracts(event)` | 대표 | 서명 대기인 사람에게 다시 알림 |
+| `void_contract(contract, reason)` | 대표 | 무효 (사유 필수) |
+| `sign_contract(contract, signature, ip, user_agent)` | 회원 본인 | 정산 정보가 있어야 함(`PRIVATE_REQUIRED`). 서명 이미지·시각·IP·기기·가린 주민번호·주소를 남기고 SHA-256 문서 해시를 DB가 계산 |
+| `save_payment(event, member, pay_date, items, tax, edited, memo)` | 대표 | 정산 저장(항목 전체 교체). 세금 미정이면 `draft`, 정해지면 `scheduled`. 지급 완료·보류는 고칠 수 없음(`PAYMENT_LOCKED`) |
+| `set_payment_status(ids, status, reason)` | 대표 | 지급 완료(`scheduled`만, 회원 알림)·보류(사유 필수)·보류 풀기. 바꾼 개수를 돌려줌 |
+| `log_payment_export(pay_date, count, total)` | 대표 | 이체·원천징수 파일 내려받기 기록 |
+| 트리거 `on_event_cancelled` | 자동 | 일정 취소 → 계약 무효, 지급 전 정산 취소 |
+| 트리거 `on_selection_removed` | 자동 | 그 일정에 확정된 날짜가 하나도 안 남으면 계약 무효, 지급 전 정산 취소 |
+
+**세금 계산** (`src/lib/tax.ts`): 기타소득은 지급액의 8%(필요경비 60% 뒤 20%), 지급액 125,000원 이하면 0원(과세최저한). 사업소득은 3%, 소득세 1,000원 미만이면 0원(소액부징수). 지방소득세는 소득세의 10%. 10원 미만 버림. 교통비·지방비를 넣을지는 설정으로 고른다. 세목은 세무사 확인 전까지 "아직 정하지 않음"이다.
+

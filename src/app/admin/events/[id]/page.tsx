@@ -29,12 +29,15 @@ import { calculatePay, effectiveRate, PAY_TYPE_LABEL, parsePayRules, type PayRul
 import { STATUS_BADGE } from "../badges";
 import { EventForm, type EventFormValues } from "../event-form";
 import { loadRolesAndRules } from "../load";
+import { loadSettlement } from "@/lib/settlement-load";
 import { AttendanceBoard, type AttendanceDay, type PersonTotal } from "./attendance-board";
+import { ContractBoard, type ContractRow } from "./contract-board";
+import { PaymentBoard, type PaymentRow, type SavedPayment } from "./payment-board";
 import { SelectionBoard, type ApplicantRow, type DayOption, type MemberOption } from "./selection-board";
 import { StatusActions } from "./status-actions";
 
 type Supabase = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
-type Tab = "applicants" | "attendance" | "info";
+type Tab = "applicants" | "attendance" | "contracts" | "payments" | "info";
 
 interface InternalRow {
   client_name: string;
@@ -218,6 +221,95 @@ function personTotals(apps: AppRow[], days: DayRow[], extras: ExtraRuleRow[], ru
     .sort((x, y) => x.name.localeCompare(y.name, "ko"));
 }
 
+interface ContractDbRow {
+  id: string;
+  member_id: string;
+  status: "requested" | "signed" | "voided";
+  requested_at: string;
+  signed_at: string | null;
+}
+
+interface PaymentDbRow {
+  member_id: string;
+  status: SavedPayment["status"];
+  pay_date: string;
+  gross: number;
+  income_tax: number;
+  local_tax: number;
+  net: number;
+  edited: boolean;
+  memo: string;
+  held_reason: string;
+  payment_items: { kind: PaymentRow["computed"]["items"][number]["kind"]; label: string; amount: number; day_id: string | null; sort_order: number }[];
+}
+
+// "계약"·"정산" 탭: 확정자별 계약 현황과 정산
+async function settleTab(supabase: Supabase, event: EventRow, tab: "contracts" | "payments") {
+  const s = await loadSettlement(supabase, event.id);
+  const memberIds = s?.members.map((m) => m.memberId) ?? [];
+  const { data: privRows } = memberIds.length
+    ? await supabase.from("member_private").select("member_id").in("member_id", memberIds).returns<{ member_id: string }[]>()
+    : { data: [] };
+  const hasPrivate = new Set((privRows ?? []).map((p) => p.member_id));
+  const canAct = event.status !== "draft" && event.status !== "cancelled";
+
+  if (tab === "contracts") {
+    const { data } = await supabase.from("contracts").select("id, member_id, status, requested_at, signed_at").eq("event_id", event.id).order("requested_at").returns<ContractDbRow[]>();
+    // 사람마다 가장 최근 계약서 (무효가 아닌 것이 있으면 그것)
+    const latest = new Map<string, ContractDbRow>();
+    for (const c of data ?? []) {
+      const prev = latest.get(c.member_id);
+      if (!prev || prev.status === "voided") latest.set(c.member_id, c);
+    }
+    const rows: ContractRow[] = (s?.members ?? []).map((m) => {
+      const c = latest.get(m.memberId);
+      return {
+        memberId: m.memberId,
+        name: m.name,
+        hasPrivate: hasPrivate.has(m.memberId),
+        contract: c ? { id: c.id, status: c.status, requestedAt: c.requested_at, signedAt: c.signed_at } : null,
+      };
+    });
+    return <ContractBoard eventId={event.id} rows={rows} canSend={canAct} />;
+  }
+
+  const { data } = await supabase
+    .from("payments")
+    .select("member_id, status, pay_date, gross, income_tax, local_tax, net, edited, memo, held_reason, payment_items(kind, label, amount, day_id, sort_order)")
+    .eq("event_id", event.id)
+    .returns<PaymentDbRow[]>();
+  const saved = new Map((data ?? []).map((p) => [p.member_id, p]));
+  const rows: PaymentRow[] = (s?.members ?? []).map((m) => {
+    const p = saved.get(m.memberId);
+    return {
+      memberId: m.memberId,
+      name: m.name,
+      hasPrivate: hasPrivate.has(m.memberId),
+      computed: {
+        items: m.actual.items,
+        gross: m.actual.workAmount + m.actual.extraAmount,
+        unknownDays: m.actual.unknownDays,
+        missingOvertimeRate: m.actual.missingOvertimeRate,
+      },
+      saved: p
+        ? {
+            status: p.status,
+            payDate: p.pay_date,
+            gross: p.gross,
+            incomeTax: p.income_tax,
+            localTax: p.local_tax,
+            net: p.net,
+            edited: p.edited,
+            memo: p.memo,
+            heldReason: p.held_reason,
+            items: [...p.payment_items].sort((a, b) => a.sort_order - b.sort_order).map(({ kind, label, amount, day_id }) => ({ kind, label, amount, day_id })),
+          }
+        : null,
+    };
+  });
+  return <PaymentBoard eventId={event.id} rows={rows} tax={s?.tax ?? { type: "unset", threshold: true, includeExtras: true }} defaultPayDate={s?.payDate ?? event.end_date} canSettle={canAct} />;
+}
+
 function InfoRow({ term, children }: { term: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 border-b border-[#eef0f3] py-2.5 last:border-0">
@@ -274,7 +366,8 @@ export default async function EventDetailPage({
 
   const status = event.status;
   const showAttendance = status !== "draft";
-  const tab: Tab = requested === "info" || (requested === "attendance" && showAttendance) ? requested : "applicants";
+  const tab: Tab =
+    requested === "info" || (showAttendance && (requested === "attendance" || requested === "contracts" || requested === "payments")) ? requested : "applicants";
   const locked = status === "completed" || status === "cancelled";
   const dayById = new Map(days.map((d) => [d.id, d]));
   const dayOrder = new Map(days.map((d, i) => [d.id, i]));
@@ -282,7 +375,13 @@ export default async function EventDetailPage({
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "applicants", label: `신청자·선발 ${new Set(apps.filter((a) => a.status !== "cancelled").map((a) => a.member_id)).size}명` },
-    ...(showAttendance ? [{ key: "attendance" as const, label: `출석 확인 ${new Set(selected.map((a) => a.member_id)).size}명` }] : []),
+    ...(showAttendance
+      ? [
+          { key: "attendance" as const, label: `출석 확인 ${new Set(selected.map((a) => a.member_id)).size}명` },
+          { key: "contracts" as const, label: "계약" },
+          { key: "payments" as const, label: "정산" },
+        ]
+      : []),
     { key: "info", label: "일정 정보" },
   ];
 
@@ -385,6 +484,8 @@ export default async function EventDetailPage({
       ) : (
         <AttendanceBoard eventId={event.id} days={attendanceDays} rules={rules} totals={personTotals(apps, days, extras, rules)} />
       );
+  } else if (tab === "contracts" || tab === "payments") {
+    body = await settleTab(supabase, event, tab);
   } else if (locked) {
     body = <EventSummary {...data} />;
   } else {

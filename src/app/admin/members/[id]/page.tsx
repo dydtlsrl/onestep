@@ -7,6 +7,7 @@ import { NOTE_TYPE_LABEL, STATUS_LABEL, type NoteType } from "@/lib/members";
 import { formatPhone } from "@/lib/phone";
 import { MemberControls } from "./member-controls";
 import { MemberRateForm } from "./member-rate-form";
+import { PrivateCard, type PrivateMasked } from "./private-card";
 import { parsePayRules } from "@/lib/pay";
 import { DeleteNoteButton, NoteForm } from "./note-form";
 
@@ -59,7 +60,7 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
   if (!z.uuid().safeParse(id).success) notFound();
 
   const { supabase } = await requireAdmin();
-  const [{ data: member }, { data: notes }, { data: setting }] = await Promise.all([
+  const [{ data: member }, { data: notes }, { data: setting }, { data: priv }, { data: participation }] = await Promise.all([
     supabase
       .from("profiles")
       .select(
@@ -74,6 +75,8 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
       .order("created_at", { ascending: false })
       .returns<NoteRow[]>(),
     supabase.from("app_settings").select("value").eq("key", "pay_rules").maybeSingle<{ value: unknown }>(),
+    supabase.from("member_private").select("rrn_masked, bank_name, account_masked, account_holder, address").eq("member_id", id).maybeSingle<PrivateMasked>(),
+    supabase.from("member_participation").select("attended_count").eq("member_id", id).maybeSingle<{ attended_count: number }>(),
   ]);
 
   if (!member) notFound();
@@ -95,37 +98,42 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        <Section title="신청 정보">
-          <dl className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-2 text-sm">
-            <dt className="text-muted">휴대폰</dt>
-            <dd>
-              <a href={`tel:${member.phone}`} className="underline-offset-4 hover:underline">
-                {formatPhone(member.phone)}
-              </a>
-            </dd>
-            <dt className="text-muted">활동 지역</dt>
-            <dd>{member.region || "—"}</dd>
-            <dt className="text-muted">경력</dt>
-            <dd>{member.career_years}년</dd>
-            <dt className="text-muted">경력 사항</dt>
-            <dd className="whitespace-pre-line">{member.career_note || "—"}</dd>
-            <dt className="text-muted">추천인</dt>
-            <dd>{member.referrer_name || "—"}</dd>
-            <dt className="text-muted">초대 링크</dt>
-            <dd>{member.invites?.memo || "—"}</dd>
-            <dt className="text-muted">신청일</dt>
-            <dd>{formatDate(member.created_at)}</dd>
-            <dt className="text-muted">승인일</dt>
-            <dd>{member.approved_at ? formatDate(member.approved_at) : "—"}</dd>
-          </dl>
-        </Section>
+        <div className="flex flex-col gap-4">
+          <Section title="신청 정보">
+            <dl className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-2 text-sm">
+              <dt className="text-muted">휴대폰</dt>
+              <dd>
+                <a href={`tel:${member.phone}`} className="underline-offset-4 hover:underline">
+                  {formatPhone(member.phone)}
+                </a>
+              </dd>
+              <dt className="text-muted">활동 지역</dt>
+              <dd>{member.region || "—"}</dd>
+              <dt className="text-muted">경력</dt>
+              <dd>{member.career_years}년</dd>
+              <dt className="text-muted">경력 사항</dt>
+              <dd className="whitespace-pre-line">{member.career_note || "—"}</dd>
+              <dt className="text-muted">추천인</dt>
+              <dd>{member.referrer_name || "—"}</dd>
+              <dt className="text-muted">초대 링크</dt>
+              <dd>{member.invites?.memo || "—"}</dd>
+              <dt className="text-muted">신청일</dt>
+              <dd>{formatDate(member.created_at)}</dd>
+              <dt className="text-muted">승인일</dt>
+              <dd>{member.approved_at ? formatDate(member.approved_at) : "—"}</dd>
+            </dl>
+          </Section>
+          <Section title="정산 정보">
+            <PrivateCard memberId={member.id} info={priv ?? null} />
+          </Section>
+        </div>
 
         <div className="flex flex-col gap-4">
           <Section title="활동 요약">
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="rounded-lg bg-ground p-3">
                 <p className="text-[13px] text-muted">참여</p>
-                <p className="text-sm font-bold text-muted">일정 기능 후</p>
+                <p className="text-xl font-bold">{Number(participation?.attended_count ?? 0)}</p>
               </div>
               <div className={`rounded-lg p-3 ${noShow ? "bg-warn-soft" : "bg-ground"}`}>
                 <p className="text-[13px] text-muted">노쇼</p>

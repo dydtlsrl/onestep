@@ -8,7 +8,10 @@ const LINKS = [
   { href: "/admin/applications", label: "가입 승인" },
   { href: "/admin/members", label: "회원" },
   { href: "/admin/invites", label: "초대 링크" },
+  { href: "/admin/payments", label: "정산" },
   { href: "/admin/rates", label: "단가표" },
+  { href: "/admin/contracts", label: "계약서 양식" },
+  { href: "/admin/settings", label: "설정" },
 ];
 
 export function AdminNav({ pendingCount }: { pendingCount: number }) {

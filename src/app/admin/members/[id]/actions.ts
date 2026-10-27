@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { decryptPii } from "@/lib/crypto";
 import { messageForError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/server";
 
@@ -106,4 +107,26 @@ export async function deleteNote(formData: FormData) {
   const supabase = await createClient();
   await supabase.from("member_notes").delete().eq("id", id.data);
   refresh(member.data);
+}
+
+export interface RevealState {
+  error?: string;
+  rrn?: string;
+  account?: string;
+}
+
+// 주민번호·계좌번호 원문 보기. DB 함수가 열람 기록을 남긴다.
+export async function revealPrivate(_prev: RevealState, formData: FormData): Promise<RevealState> {
+  const id = memberId.safeParse(formData.get("memberId"));
+  if (!id.success) return { error: "잘못된 요청이에요." };
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_private_secrets", { p_member_ids: [id.data], p_purpose: "view" });
+  if (error) return { error: messageForError(error) };
+  const row = (data as { rrn_enc: string; account_enc: string }[] | null)?.[0];
+  if (!row) return { error: "등록된 정산 정보가 없어요." };
+  try {
+    return { rrn: decryptPii(row.rrn_enc), account: decryptPii(row.account_enc) };
+  } catch {
+    return { error: "암호를 풀지 못했어요. 암호화 키(PII_ENCRYPTION_KEY)가 저장할 때와 같은지 확인해 주세요." };
+  }
 }

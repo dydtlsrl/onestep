@@ -189,7 +189,11 @@ export default async function HomePage() {
   if (profile.status !== "active") redirect("/pending");
   if (isActiveAdmin(profile)) redirect("/admin");
 
-  const { mine, open } = await loadHome(supabase, userId);
+  const [{ mine, open }, { data: waiting }, { count: privCount }] = await Promise.all([
+    loadHome(supabase, userId),
+    supabase.from("contracts").select("id, title").eq("member_id", userId).eq("status", "requested").order("requested_at").returns<{ id: string; title: string }[]>(),
+    supabase.from("member_private").select("member_id", { count: "exact", head: true }).eq("member_id", userId),
+  ]);
 
   return (
     <PageShell actions={<NotificationBell />}>
@@ -197,6 +201,18 @@ export default async function HomePage() {
         <h1 className="text-xl font-bold">{profile.name}님, 안녕하세요</h1>
         <span className="rounded-md bg-navy px-2 py-0.5 text-xs font-bold text-white">{TIER_LABEL[profile.tier]}</span>
       </div>
+
+      {(waiting ?? []).length > 0 && (
+        <section aria-label="서명할 계약서" className="flex flex-col gap-2 rounded-xl border-2 border-brand bg-white p-4">
+          <h2 className="font-bold">서명할 계약서가 {(waiting ?? []).length}건 있어요</h2>
+          {(waiting ?? []).map((c) => (
+            <Link key={c.id} href={`/contracts/${c.id}`} className="flex h-11 items-center justify-center rounded-lg bg-brand px-3 text-sm font-bold text-white hover:bg-brand-strong">
+              {c.title} 서명하기
+            </Link>
+          ))}
+          {privCount === 0 && <p className="text-[13px] text-muted">서명하기 전에 주민등록번호와 계좌를 등록하게 돼요.</p>}
+        </section>
+      )}
 
       <section className="flex flex-col gap-3" aria-labelledby="my-events">
         <h2 id="my-events" className="text-lg font-bold">
@@ -265,7 +281,17 @@ export default async function HomePage() {
         )}
       </section>
 
-      <p className="text-[13px] leading-relaxed text-muted">계약서 서명과 정산 내역은 다음 단계에서 열려요.</p>
+      <nav aria-label="내 메뉴" className="grid grid-cols-3 gap-2">
+        {[
+          { href: "/contracts", label: "내 계약서" },
+          { href: "/payments", label: "정산 내역" },
+          { href: "/me", label: "내 정보" },
+        ].map((l) => (
+          <Link key={l.href} href={l.href} className="flex h-12 items-center justify-center rounded-lg border border-line bg-white text-sm font-bold text-ink hover:bg-ground">
+            {l.label}
+          </Link>
+        ))}
+      </nav>
       <SignOutButton />
     </PageShell>
   );

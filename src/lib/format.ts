@@ -26,3 +26,18 @@ export function formatDateTime(iso: string): string {
 export function formatWon(amount: number): string {
   return `${amount.toLocaleString("ko-KR")}원`;
 }
+
+const fullDateTimeFormat = new Intl.DateTimeFormat("ko-KR", {
+  timeZone: "Asia/Seoul",
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
+// 계약서처럼 연도까지 필요한 곳 (2026년 10월 27일 11:00)
+export function formatFullDateTime(iso: string): string {
+  return fullDateTimeFormat.format(new Date(iso));
+}
