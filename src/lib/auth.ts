@@ -1,5 +1,6 @@
 // 지금 로그인한 사람과 회원 정보를 읽는다. 서버에서만 쓴다.
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { MemberTier } from "@/lib/tier";
 
@@ -25,7 +26,8 @@ export interface Profile {
 export const PROFILE_COLUMNS =
   "id, name, phone, region, career_years, career_note, referrer_name, role, status, tier, created_at";
 
-export async function getCurrentMember() {
+// 한 번의 요청 안에서는 결과를 다시 쓴다. 레이아웃과 페이지가 각각 불러도 로그인 확인·회원 조회는 한 번만 한다.
+export const getCurrentMember = cache(async () => {
   const supabase = await createClient();
   // getClaims는 로그인 토큰의 서명을 확인한다. 쿠키 내용을 그대로 믿지 않는다.
   const { data } = await supabase.auth.getClaims();
@@ -39,7 +41,7 @@ export async function getCurrentMember() {
     .maybeSingle<Profile>();
 
   return { supabase, userId, profile: profile ?? null };
-}
+});
 
 export function isActiveAdmin(profile: Profile | null): boolean {
   return profile?.role === "admin" && profile.status === "active";

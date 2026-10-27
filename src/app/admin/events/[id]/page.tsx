@@ -245,6 +245,20 @@ interface PaymentDbRow {
 
 // "계약"·"정산" 탭: 확정자별 계약 현황과 정산
 async function settleTab(supabase: Supabase, event: EventRow, tab: "contracts" | "payments") {
+  // 계약·정산 목록은 확정자 계산과 같이 불러 DB를 오가는 횟수를 줄인다 (.then으로 바로 요청을 보낸다)
+  const contractsQuery =
+    tab === "contracts"
+      ? supabase.from("contracts").select("id, member_id, status, requested_at, signed_at").eq("event_id", event.id).order("requested_at").returns<ContractDbRow[]>().then((r) => r)
+      : null;
+  const paymentsQuery =
+    tab === "payments"
+      ? supabase
+          .from("payments")
+          .select("member_id, status, pay_date, gross, income_tax, local_tax, net, edited, memo, held_reason, payment_items(kind, label, amount, day_id, sort_order)")
+          .eq("event_id", event.id)
+          .returns<PaymentDbRow[]>()
+          .then((r) => r)
+      : null;
   const s = await loadSettlement(supabase, event.id);
   const memberIds = s?.members.map((m) => m.memberId) ?? [];
   const { data: privRows } = memberIds.length
@@ -254,7 +268,7 @@ async function settleTab(supabase: Supabase, event: EventRow, tab: "contracts" |
   const canAct = event.status !== "draft" && event.status !== "cancelled";
 
   if (tab === "contracts") {
-    const { data } = await supabase.from("contracts").select("id, member_id, status, requested_at, signed_at").eq("event_id", event.id).order("requested_at").returns<ContractDbRow[]>();
+    const { data } = await contractsQuery!;
     // 사람마다 가장 최근 계약서 (무효가 아닌 것이 있으면 그것)
     const latest = new Map<string, ContractDbRow>();
     for (const c of data ?? []) {
@@ -273,11 +287,7 @@ async function settleTab(supabase: Supabase, event: EventRow, tab: "contracts" |
     return <ContractBoard eventId={event.id} rows={rows} canSend={canAct} />;
   }
 
-  const { data } = await supabase
-    .from("payments")
-    .select("member_id, status, pay_date, gross, income_tax, local_tax, net, edited, memo, held_reason, payment_items(kind, label, amount, day_id, sort_order)")
-    .eq("event_id", event.id)
-    .returns<PaymentDbRow[]>();
+  const { data } = await paymentsQuery!;
   const saved = new Map((data ?? []).map((p) => [p.member_id, p]));
   const rows: PaymentRow[] = (s?.members ?? []).map((m) => {
     const p = saved.get(m.memberId);
