@@ -16,10 +16,10 @@ export default async function NewEventPage() {
       <h1 className="text-2xl font-bold tracking-tight">새 일정</h1>
       {roles.length === 0 && (
         <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">
-          단가표가 비어 있어요. 날짜마다 단가를 직접 적거나, <Link href="/admin/rates" className="font-bold underline">단가표</Link>에 자주 쓰는 단가를 넣어 두면 불러올 수 있어요.
+          단가표가 비어 있어요. 날짜마다 단가를 직접 적거나, <Link href="/admin/rates" className="font-bold underline">단가표</Link>에 자주 쓰는 단가를 저장해 두면 버튼 한 번으로 불러올 수 있어요.
         </p>
       )}
-      <EventForm mode="create" initial={emptyEvent(rules)} roles={roles} rules={rules} />
+      <EventForm mode="create" initial={emptyEvent(rules, roles)} roles={roles} rules={rules} />
     </>
   );
 }

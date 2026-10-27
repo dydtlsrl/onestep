@@ -9,7 +9,7 @@ export async function loadRolesAndRules(supabase: Supabase) {
   const [{ data: roles }, { data: setting }] = await Promise.all([
     supabase
       .from("job_roles")
-      .select("id, name, pay_type, default_rate, min_paid_hours, overtime_rate")
+      .select("id, name, pay_type, default_rate, min_paid_hours, overtime_rate, default_for")
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
       .returns<RoleOption[]>(),

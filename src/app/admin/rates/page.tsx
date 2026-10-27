@@ -23,13 +23,13 @@ function Section({ title, description, children }: { title: string; description?
   );
 }
 
-// 단가표: 역할별 인력 보수(시급·일급)와 공통 계산 규칙. 일정을 등록할 때 이 값을 불러온다.
+// 단가표: 자주 쓰는 보수 조건(시급·일급) 모음과 공통 계산 규칙. 일정을 만들 때 이 값을 불러온다.
 export default async function RatesPage() {
   const { supabase } = await requireAdmin();
   const [{ data, error }, { data: setting }] = await Promise.all([
     supabase
       .from("job_roles")
-      .select("id, name, description, pay_type, default_rate, min_paid_hours, overtime_rate, sort_order, is_active")
+      .select("id, name, description, pay_type, default_rate, min_paid_hours, overtime_rate, sort_order, is_active, default_for")
       .order("is_active", { ascending: false })
       .order("sort_order", { ascending: true })
       .order("name", { ascending: true })
@@ -47,8 +47,8 @@ export default async function RatesPage() {
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold tracking-tight">단가표</h1>
         <p className="text-sm leading-relaxed text-muted">
-          역할별로 인력에게 주는 보수(세금 공제 전)예요. 고객사와 계약한 금액이 아니에요. 일정을 등록할 때 이 값을
-          불러오고, 일정마다 바꿀 수 있어요.
+          자주 쓰는 보수 조건을 이름 붙여 저장해 두는 곳이에요 (인력에게 주는 금액, 세금 공제 전). 일정을 만들 때 날짜마다
+          버튼 한 번으로 불러오고, ★ 세팅일 기본·진행일 기본으로 정한 것은 날짜를 추가하면 자동으로 들어가요.
         </p>
       </div>
 
@@ -63,7 +63,7 @@ export default async function RatesPage() {
         <PayRulesForm rules={rules} />
       </Section>
 
-      <Section title="새 역할">
+      <Section title="새 단가">
         <CreateRoleForm nextOrder={nextOrder} rules={rules} />
       </Section>
 
@@ -75,18 +75,18 @@ export default async function RatesPage() {
             <RoleItem key={role.id} role={role} rules={rules} />
           ))}
           {!error && roles.length === 0 && (
-            <li className="py-8 text-center text-sm text-muted">아직 등록한 역할이 없어요. 위에서 첫 역할을 추가해 주세요.</li>
+            <li className="py-8 text-center text-sm text-muted">아직 저장한 단가가 없어요. 위에서 첫 단가를 추가해 주세요.</li>
           )}
         </ul>
       </section>
 
-      <Section title="계산해 보기" description="역할과 근무 시간을 넣으면 받게 될 보수를 미리 볼 수 있어요.">
+      <Section title="계산해 보기" description="단가와 근무 시간을 넣으면 받게 될 보수를 미리 볼 수 있어요.">
         <PayCalculator roles={activeRoles} rules={rules} />
       </Section>
 
       <p className="text-[13px] leading-relaxed text-muted">
-        숨긴 역할은 새 일정에서 고를 수 없지만, 이미 등록한 일정의 금액에는 영향이 없어요. 지난 기록을 지키기 위해 역할은
-        지우지 않고 숨겨요.
+        일정에는 불러온 순간의 금액이 복사돼요. 단가를 고치거나 숨겨도 이미 만든 일정의 금액은 그대로예요. 지난 기록을 지키기
+        위해 지우지 않고 숨겨요.
       </p>
     </>
   );

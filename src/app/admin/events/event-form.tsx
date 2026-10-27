@@ -6,7 +6,7 @@ import { DAY_KIND_LABEL, EVENT_TYPE_LABEL, formatShortDate, scheduledMinutes, su
 import { formatWon } from "@/lib/format";
 import { calculatePay, PAY_TYPE_LABEL, type PayRules, type PayType } from "@/lib/pay";
 import { createEvent, updateEvent, type EventActionState } from "./actions";
-import { emptyEvent, SETUP_MIN_HOURS, type DayDraft, type EventFormValues, type RoleOption } from "./event-form-values";
+import { activePresetId, defaultPay, emptyEvent, presetValues, type DayDraft, type EventFormValues, type RoleOption } from "./event-form-values";
 
 export type { DayDraft, EventFormValues, RoleOption };
 
@@ -103,30 +103,34 @@ export function EventForm({
     setDays((list) => list.map((d) => (d.key === key ? { ...d, ...patch } : d)));
   }
 
-  // 단가표의 값(지급 방식·단가·최소 보장·초과 금액)을 이 날짜에 불러온다
-  function loadRole(key: string, roleId: string) {
-    const role = roles.find((r) => r.id === roleId);
-    if (!role) return;
-    updateDay(key, {
-      payType: role.pay_type,
-      rate: String(role.default_rate),
-      minPaidHours: role.min_paid_hours === null ? "" : String(role.min_paid_hours),
-      overtimeRate: role.overtime_rate === null ? "" : String(role.overtime_rate),
-    });
+  // 종류를 세팅↔진행으로 바꿀 때, 단가가 원래 종류의 기본 그대로였으면 새 종류의 기본으로 바꿔 준다
+  function changeKind(day: DayDraft, kind: DayKind) {
+    const before = defaultPay(day.kind, roles, rules);
+    const untouched =
+      day.payType === before.payType && day.rate === before.rate && day.minPaidHours === before.minPaidHours && day.overtimeRate === before.overtimeRate;
+    // (presetId는 비교하지 않는다: 같은 금액이면 손대지 않은 것으로 본다)
+    updateDay(day.key, untouched ? { kind, ...defaultPay(kind, roles, rules) } : { kind });
   }
 
-  // 마지막 날을 복사해 다음 날 진행일을 만든다
+  // 마지막 날을 복사해 다음 날 진행일을 만든다 (마지막 날이 세팅일이면 단가는 ★진행일 기본)
   function addMainDay() {
     const last = sorted.at(-1);
     setDays((list) => [
       ...list,
       last
-        ? { ...last, id: undefined, key: newKey(), dayDate: shiftDate(last.dayDate, 1), kind: "main" }
-        : { ...emptyEvent(rules).days[0], key: newKey() },
+        ? {
+            ...last,
+            ...(last.kind === "main" ? {} : defaultPay("main", roles, rules)),
+            id: undefined,
+            key: newKey(),
+            dayDate: shiftDate(last.dayDate, 1),
+            kind: "main",
+          }
+        : { ...emptyEvent(rules, roles).days[0], key: newKey() },
     ]);
   }
 
-  // 첫날 전날에 세팅일을 만든다 (기본 시급, 최소 4시간)
+  // 첫날 전날에 세팅일을 만든다 (단가는 ★세팅일 기본)
   function addSetupDay() {
     const first = sorted[0];
     setDays((list) => [
@@ -139,10 +143,7 @@ export function EventForm({
         startTime: "14:00",
         endTime: "18:00",
         headcount: "1",
-        payType: "hourly",
-        rate: String(rules.defaultHourlyRate),
-        minPaidHours: SETUP_MIN_HOURS,
-        overtimeRate: "",
+        ...defaultPay("setup", roles, rules),
       },
     ]);
   }
@@ -198,7 +199,7 @@ export function EventForm({
 
       <Section
         title="날짜와 모집 인원·단가"
-        hint={`세팅일·진행일처럼 날짜마다 시간, 모집 인원, 단가를 정해요. 회원은 날짜만 골라 신청하고, 역할은 신청자를 보고 일정 상세에서 사람마다 정해요. 새 날짜에는 기본 시급 ${formatWon(rules.defaultHourlyRate)}이 들어가요 (단가표 화면의 공통 계산 규칙에서 바꿀 수 있어요).`}
+        hint="세팅일·진행일처럼 날짜마다 시간, 모집 인원, 단가를 정해요. 단가는 단가표에 저장해 둔 것을 버튼으로 고르고, 날짜를 추가하면 ★세팅일 기본·진행일 기본이 자동으로 들어가요. 회원은 날짜만 골라 신청하고, 역할은 신청자를 보고 일정 상세에서 사람마다 정해요."
       >
         <ol className="flex flex-col gap-4">
           {sorted.map((d, index) => {
@@ -240,7 +241,7 @@ export function EventForm({
                     <input id={`${d.key}-date`} type="date" required value={d.dayDate} onChange={(e) => updateDay(d.key, { dayDate: e.target.value })} className={field} />
                   </Field>
                   <Field id={`${d.key}-kind`} text="종류" className="flex-[1_1_100px]">
-                    <select id={`${d.key}-kind`} value={d.kind} onChange={(e) => updateDay(d.key, { kind: e.target.value as DayKind })} className={field}>
+                    <select id={`${d.key}-kind`} value={d.kind} onChange={(e) => changeKind(d, e.target.value as DayKind)} className={field}>
                       {(Object.keys(DAY_KIND_LABEL) as DayKind[]).map((k) => (
                         <option key={k} value={k}>
                           {DAY_KIND_LABEL[k]}
@@ -258,7 +259,39 @@ export function EventForm({
                     <input id={`${d.key}-end`} type="time" required value={d.endTime} onChange={(e) => updateDay(d.key, { endTime: e.target.value })} className={field} />
                   </Field>
                 </div>
-                <div className="flex flex-wrap items-end gap-3 rounded-lg bg-[#f8f9fa] p-3">
+                <div className="flex flex-col gap-3 rounded-lg bg-[#f8f9fa] p-3">
+                  {roles.length > 0 && (
+                    <div className="flex flex-col gap-2" role="group" aria-label={`${index + 1}일차 단가 고르기`}>
+                      <span className="text-sm font-bold">단가 고르기</span>
+                      <div className="flex flex-wrap gap-2">
+                        {roles.map((r) => {
+                          const on = activePresetId(d, roles) === r.id;
+                          return (
+                            <button
+                              key={r.id}
+                              type="button"
+                              aria-pressed={on}
+                              onClick={() => updateDay(d.key, presetValues(r))}
+                              className={`flex min-h-10 flex-col items-start rounded-lg border px-3 py-1.5 text-left ${on ? "border-brand bg-brand-soft" : "border-field bg-white hover:bg-ground"}`}
+                            >
+                              <span className={`text-sm font-bold ${on ? "text-brand-strong" : "text-ink"}`}>
+                                {on && "✓ "}
+                                {r.name}
+                              </span>
+                              <span className="text-[12px] text-muted">
+                                {PAY_TYPE_LABEL[r.pay_type]} {formatWon(r.default_rate)}
+                                {r.pay_type === "hourly" && r.min_paid_hours ? ` · 최소 ${r.min_paid_hours}시간` : ""}
+                              </span>
+                            </button>
+                          );
+                        })}
+                        {activePresetId(d, roles) === null && (
+                          <span className="flex min-h-10 items-center rounded-lg border border-dashed border-field px-3 text-sm text-muted">직접 입력한 단가</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-end gap-3">
                   <Field id={`${d.key}-count`} text="모집 인원" className="w-24">
                     <input id={`${d.key}-count`} type="number" min={1} max={500} value={d.headcount} onChange={(e) => updateDay(d.key, { headcount: e.target.value })} className={`${field} text-right`} />
                   </Field>
@@ -290,26 +323,7 @@ export function EventForm({
                       <input id={`${d.key}-ot`} inputMode="numeric" value={d.overtimeRate} onChange={(e) => updateDay(d.key, { overtimeRate: e.target.value })} className={`${field} text-right`} />
                     </Field>
                   )}
-                  {roles.length > 0 && (
-                    <Field id={`${d.key}-load`} text="단가표에서 불러오기" className="flex-[1_1_160px]">
-                      <select
-                        id={`${d.key}-load`}
-                        value=""
-                        onChange={(e) => {
-                          loadRole(d.key, e.target.value);
-                          e.target.value = "";
-                        }}
-                        className={field}
-                      >
-                        <option value="">고르기…</option>
-                        {roles.map((r) => (
-                          <option key={r.id} value={r.id}>
-                            {r.name} ({PAY_TYPE_LABEL[r.pay_type]} {formatWon(r.default_rate)})
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                  )}
+                  </div>
                 </div>
                 <p className="text-[13px] text-muted">
                   1인 예상 보수 (초과 없이): <strong className="text-ink">{formatWon(estimate.total)}</strong>

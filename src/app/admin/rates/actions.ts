@@ -14,7 +14,7 @@ const digitsOnly = (value: FormDataEntryValue | null) => String(value ?? "").rep
 
 const roleSchema = z
   .object({
-    name: z.string().trim().min(1, "역할 이름을 적어 주세요.").max(30, "역할 이름은 30자까지 쓸 수 있어요."),
+    name: z.string().trim().min(1, "이름을 적어 주세요.").max(30, "이름은 30자까지 쓸 수 있어요."),
     payType: z.enum(["hourly", "daily"], { error: "지급 방식을 골라 주세요." }),
     defaultRate: z.coerce
       .number({ error: "단가는 숫자로 적어 주세요." })
@@ -57,7 +57,7 @@ function readRole(formData: FormData) {
 }
 
 function saveError(error: { code?: string }): string {
-  if (error.code === "23505") return "같은 이름의 역할이 이미 있어요.";
+  if (error.code === "23505") return "같은 이름의 단가가 이미 있어요.";
   return "저장하지 못했어요. 대표 계정으로 로그인했는지 확인해 주세요.";
 }
 
@@ -72,7 +72,7 @@ export async function createRole(_prev: RateState, formData: FormData): Promise<
   if (error) return { error: saveError(error) };
 
   revalidatePath("/admin/rates");
-  return { ok: `${parsed.data.name} 역할을 추가했어요.` };
+  return { ok: `${parsed.data.name} 단가를 추가했어요.` };
 }
 
 export async function updateRole(_prev: RateState, formData: FormData): Promise<RateState> {
@@ -95,8 +95,24 @@ export async function setRoleActive(formData: FormData) {
   const active = formData.get("active") === "true";
 
   const supabase = await createClient();
-  await supabase.from("job_roles").update({ is_active: active }).eq("id", id.data);
+  // 숨기면 세팅일·진행일 기본 표시도 함께 뗀다
+  await supabase.from("job_roles").update(active ? { is_active: true } : { is_active: false, default_for: null }).eq("id", id.data);
   revalidatePath("/admin/rates");
+  revalidatePath("/admin/events/new");
+}
+
+// 세팅일 기본·진행일 기본으로 정하거나 뗀다 (종류마다 하나)
+export async function setRateDefault(formData: FormData) {
+  const id = z.uuid().safeParse(formData.get("id"));
+  const kind = z.enum(["setup", "main"]).safeParse(formData.get("kind"));
+  if (!id.success || !kind.success) return;
+  const on = formData.get("on") === "true";
+
+  const supabase = await createClient();
+  await supabase.from("job_roles").update({ default_for: null }).eq("default_for", kind.data);
+  if (on) await supabase.from("job_roles").update({ default_for: kind.data }).eq("id", id.data).eq("is_active", true);
+  revalidatePath("/admin/rates");
+  revalidatePath("/admin/events/new");
 }
 
 const rulesSchema = z.object({

@@ -95,6 +95,7 @@ erDiagram
         int default_rate "시급은 1시간, 일급은 1회 보수 (원, 고객사 청구 단가 아님)"
         numeric min_paid_hours "시급 최소 보장 시간 (비우면 공통값)"
         int overtime_rate "일급 초과 1시간당 금액"
+        enum default_for "setup, main (세팅일·진행일 기본, 종류마다 하나)"
         int sort_order "정렬 순서"
         boolean is_active "사용 여부"
         timestamptz created_at
