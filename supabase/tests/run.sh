@@ -38,6 +38,7 @@ for f in "$ROOT"/supabase/migrations/*.sql; do
   echo "apply $(basename "$f")"
   "${PSQL[@]}" -f "$f"
 done
+"${PSQL[@]}" -f "$ROOT/supabase/tests/helpers.sql"
 for f in "$ROOT"/supabase/tests/*_rls.sql; do
   echo "test  $(basename "$f")"
   "${PSQL[@]}" -t -A -f "$f" 2>&1 | sed 's/^psql:[^ ]* NOTICE:  /  /' | grep -v '^$'
