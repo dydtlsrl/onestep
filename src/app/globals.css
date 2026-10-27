@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* 와이어프레임과 같은 색. 클래스 예: bg-brand, text-muted, border-line */
+@theme {
+  --color-brand: #2557d6;
+  --color-brand-strong: #1d46b0;
+  --color-brand-soft: #e8eefc;
+  --color-navy: #1a2b4c;
+  --color-ink: #1a1d21;
+  --color-body: #3a4250;
+  --color-muted: #5b6470;
+  --color-line: #dde1e6;
+  --color-field: #c9ced6;
+  --color-ground: #f4f5f7;
+  --color-warn: #9a4a00;
+  --color-warn-soft: #fff4e5;
+  --color-kakao: #fee500;
+
+  --font-sans: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+}
+
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+  word-break: keep-all;
+}
