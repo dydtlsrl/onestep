@@ -95,6 +95,14 @@ Supabase Free에는 무료 사용량 쿼터(DB 500MB, 월 활성 사용자 5만 
 
 참고로 Vercel Pro와 Supabase Pro를 함께 쓰면 기본요금만 월 약 $45이다. 실제 청구액은 선택한 호스팅, 결제 단위, 프로젝트 수, 사용량, 환율·세금, 도메인·발송비에 따라 달라진다. 가격·정책은 가입 및 실제 데이터 투입 직전에 다시 확인한다.
 
+**로그인 화면에 보이는 주소**: Google 로그인의 계정 선택 화면에는 앱 이름 대신 Supabase 주소(`<프로젝트ID>.supabase.co`)가 표시된다. Google은 브랜드 인증을 통과한 앱만 이름을 보여 주는데, `supabase.co`는 우리 도메인이 아니라 인증할 수 없기 때문이다. 처음 보는 인력이 피싱으로 오해할 수 있다.
+
+| 단계 | 대응 |
+|---|---|
+| 개발·시연 | 그대로 둔다 (개발자만 봄) |
+| 인력 초대 시작 | 앱 도메인 구입(예: onestep.co.kr). 안내문에서 카카오 로그인을 먼저 권한다. 카카오 동의 화면에는 앱 이름 "원스텝"이 나온다 |
+| 정식 운영 (Supabase Pro) | Supabase 사용자 지정 도메인(예: `auth.onestep.co.kr`, 월 $10 추가)을 켜고 Google·카카오 콜백 주소를 바꾼다. 기존 주소도 계속 동작해 중단 없이 바꿀 수 있다 |
+
 공식 확인 자료: [Vercel 요금제](https://vercel.com/docs/plans/hobby) · [Supabase 요금](https://supabase.com/docs/guides/platform/billing-on-supabase) · [무료 프로젝트 일시정지](https://supabase.com/docs/guides/platform/free-project-pausing) · [백업 범위](https://supabase.com/docs/guides/platform/backups)
 
 ## 7. 시작 전에 준비할 계정
