@@ -88,7 +88,8 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
     await member.goto(`/events/${eventId}`);
     await expect(member.getByRole("heading", { name: title })).toBeVisible();
     await member.getByRole("button", { name: "신청하기" }).click();
-    await expect(member.getByRole("button", { name: "신청하기" })).toHaveCount(0);
+    // 버튼 글자는 저장 중에도 바뀌므로, 저장이 끝난 뒤에만 나오는 "신청 취소하기"를 기다린다
+    await expect(member.getByRole("button", { name: "신청 취소하기" })).toBeVisible();
   });
 
   await test.step("대표: 확정하고 선발 결과 알림 보내기", async () => {
@@ -123,7 +124,9 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
     await member.mouse.up();
     await member.locator('input[name="agree"]').check();
     await member.getByRole("button", { name: "서명 완료" }).click();
-    await expect(member.getByRole("button", { name: "서명 완료" })).toHaveCount(0);
+    // 서명이 저장되면 "아래에서 서명해 주세요" 안내와 서명란이 사라진다
+    await expect(member.getByText("내용을 끝까지 읽고 아래에서 서명해 주세요", { exact: false })).toHaveCount(0);
+    await expect(member.getByRole("button", { name: /서명/ })).toHaveCount(0);
   });
 
   await test.step("대표: 출석 확인", async () => {
@@ -131,7 +134,8 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
     const row = admin.locator("form").filter({ hasText: memberName }).first();
     await row.getByText("참석", { exact: true }).click();
     await row.getByRole("button", { name: "저장" }).click();
-    await expect(row.getByRole("button", { name: "저장" })).toBeEnabled();
+    // 저장되면 바뀐 것이 없어져 "저장" 버튼이 다시 꺼진다
+    await expect(row.getByRole("button", { name: "저장" })).toBeDisabled();
   });
 
   await test.step("대표: 세금 처리 방식 정하기", async () => {
