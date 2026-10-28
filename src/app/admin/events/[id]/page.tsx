@@ -15,7 +15,6 @@ import {
   extrasTotal,
   formatEventRange,
   formatTime,
-  isoToKstLocal,
   scheduledMinutes,
   toRoleRate,
   type ApplicationStatus,
@@ -27,7 +26,8 @@ import {
 import { formatDate, formatDateTime, formatWon } from "@/lib/format";
 import { calculatePay, effectiveRate, PAY_TYPE_LABEL, parsePayRules, type PayRules, type RoleRate } from "@/lib/pay";
 import { STATUS_BADGE } from "../badges";
-import { EventForm, type EventFormValues } from "../event-form";
+import { EventForm } from "../event-form";
+import { eventToFormValues, type SavedEvent } from "../event-form-values";
 import { loadRolesAndRules } from "../load";
 import { loadSettlement } from "@/lib/settlement-load";
 import { AttendanceBoard, type AttendanceDay, type PersonTotal } from "./attendance-board";
@@ -147,55 +147,7 @@ async function loadRoleNames(supabase: Supabase): Promise<string[]> {
   return (data ?? []).map((r) => r.name);
 }
 
-interface EventData {
-  event: EventRow;
-  internal: InternalRow | null;
-  chatLink: string;
-  days: DayRow[];
-  extras: ExtraRuleRow[];
-}
-
-function toFormValues({ event, internal, chatLink, days, extras }: EventData): EventFormValues {
-  const rule = (type: ExtraRuleRow["type"], tier: ExtraRuleRow["tier"]) => extras.find((e) => e.type === type && e.tier === tier);
-  const regionalAll = rule("regional", "all");
-  const regionalCore = rule("regional", "core") ?? regionalAll;
-  const regionalGeneral = rule("regional", "general") ?? regionalAll;
-  const transport = rule("transport", "all");
-  return {
-    type: event.type,
-    title: event.title,
-    clientName: internal?.client_name ?? "",
-    locationName: event.location_name,
-    address: event.address,
-    notice: event.notice,
-    chatLink,
-    applyDeadline: isoToKstLocal(event.apply_deadline),
-    payDate: event.pay_date ?? "",
-    memo: internal?.memo ?? "",
-    days: days.map((d) => ({
-      key: d.id,
-      id: d.id,
-      dayDate: d.day_date,
-      kind: d.kind,
-      gatherTime: formatTime(d.gather_time),
-      startTime: formatTime(d.start_time),
-      endTime: formatTime(d.end_time),
-      headcount: String(d.headcount),
-      payType: d.pay_type,
-      rate: String(d.rate),
-      minPaidHours: d.min_paid_hours === null ? "" : String(Number(d.min_paid_hours)),
-      overtimeRate: d.overtime_rate === null ? "" : String(d.overtime_rate),
-    })),
-    allDaysRequired: event.all_days_required,
-    transportOn: transport !== undefined,
-    transportAmount: transport ? String(transport.amount) : "",
-    transportPerDay: transport?.per_day ?? true,
-    regionalOn: regionalCore !== undefined || regionalGeneral !== undefined,
-    regionalCore: regionalCore ? String(regionalCore.amount) : "",
-    regionalGeneral: regionalGeneral ? String(regionalGeneral.amount) : "",
-    regionalPerDay: (regionalCore ?? regionalGeneral)?.per_day ?? true,
-  };
-}
+type EventData = SavedEvent;
 
 // 저장된 출석으로 사람별 보수·추가 지급 합계를 낸다
 function personTotals(apps: AppRow[], days: DayRow[], extras: ExtraRuleRow[], rules: PayRules): PersonTotal[] {
@@ -505,7 +457,7 @@ export default async function EventDetailPage({
       <EventForm
         mode="edit"
         eventId={event.id}
-        initial={toFormValues(data)}
+        initial={eventToFormValues(data)}
         roles={roles}
         rules={rules}
         lockedDayIds={days.filter((d) => used.has(d.id)).map((d) => d.id)}
@@ -553,6 +505,12 @@ export default async function EventDetailPage({
           <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">취소 사유: {event.cancel_reason}</p>
         )}
         <StatusActions eventId={event.id} status={status} />
+        <Link
+          href={`/admin/events/new?copy=${event.id}`}
+          className="inline-flex min-h-10 items-center self-start text-sm text-brand underline underline-offset-4 hover:text-brand-strong"
+        >
+          이 일정 복사해서 새로 만들기 (날짜만 바꾸기)
+        </Link>
       </header>
 
       <nav aria-label="일정 상세 메뉴" className="flex gap-1 overflow-x-auto border-b border-line">

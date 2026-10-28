@@ -6,7 +6,7 @@ import { DAY_KIND_LABEL, EVENT_TYPE_LABEL, formatShortDate, scheduledMinutes, su
 import { formatWon } from "@/lib/format";
 import { calculatePay, PAY_TYPE_LABEL, type PayRules, type PayType } from "@/lib/pay";
 import { createEvent, updateEvent, type EventActionState } from "./actions";
-import { activePresetId, defaultPay, emptyEvent, presetValues, type DayDraft, type EventFormValues, type RoleOption } from "./event-form-values";
+import { activePresetId, defaultPay, emptyEvent, fillCopiedDates, presetValues, type DayDraft, type EventFormValues, type RoleOption } from "./event-form-values";
 
 export type { DayDraft, EventFormValues, RoleOption };
 
@@ -24,7 +24,9 @@ function shiftDate(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-const byDate = (a: DayDraft, b: DayDraft) => (a.dayDate || "9999").localeCompare(b.dayDate || "9999") || a.startTime.localeCompare(b.startTime);
+// 날짜 순서. 복사한 일정에서 아직 날짜를 고르지 않은 날은 원래 순서(offset)대로
+const byDate = (a: DayDraft, b: DayDraft) =>
+  (a.dayDate || "9999").localeCompare(b.dayDate || "9999") || (a.offset ?? 0) - (b.offset ?? 0) || a.startTime.localeCompare(b.startTime);
 const digitsOnly = (v: string) => v.replace(/[^0-9]/g, "");
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -238,7 +240,7 @@ export function EventForm({
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Field id={`${d.key}-date`} text="날짜" className="flex-[1_1_150px]">
-                    <input id={`${d.key}-date`} type="date" required value={d.dayDate} onChange={(e) => updateDay(d.key, { dayDate: e.target.value })} className={field} />
+                    <input id={`${d.key}-date`} type="date" required value={d.dayDate} onChange={(e) => setDays((list) => fillCopiedDates(list, d.key, e.target.value))} className={field} />
                   </Field>
                   <Field id={`${d.key}-kind`} text="종류" className="flex-[1_1_100px]">
                     <select id={`${d.key}-kind`} value={d.kind} onChange={(e) => changeKind(d, e.target.value as DayKind)} className={field}>
