@@ -155,14 +155,17 @@ npm run dev
 
 ### 9. 첫 대표 계정 만들기
 대표 계정은 초대 링크 없이 한 번만 직접 만든다.
-1. http://localhost:3000/login 에서 대표 본인의 카카오(또는 Google) 계정으로 로그인한다.
-2. "아직 가입 신청 전이에요" 화면에서 **내 계정 ID 보기**를 눌러 ID를 복사한다.
-3. Supabase SQL Editor에서 아래를 실행한다. 꺾쇠 안의 값을 바꾼다.
+1. 대표가 사이트 로그인 화면에서 본인 Google 계정으로 로그인한다. ("아직 가입 신청 전이에요" 화면이 나오면 된다)
+   Google 로그인이 "테스트 중"이면 그 Gmail을 Google Cloud > Google 인증 플랫폼 > 대상 > **테스트 사용자**에 먼저 넣는다.
+2. Supabase SQL Editor에서 아래를 실행한다. 꺾쇠 안의 값을 바꾼다. 결과에 한 줄(id, name)이 나오면 된다. 아무것도 안 나오면 그 이메일로 아직 로그인한 적이 없는 것이다.
    ```sql
    insert into public.profiles (id, name, phone, role, status, tier, privacy_agreed_at, approved_at)
-   values ('<복사한 계정 ID>', '<대표 이름>', '<휴대폰 숫자만, 예: 01012345678>', 'admin', 'active', 'core', now(), now());
+   select id, '<대표 이름>', '<휴대폰 숫자만, 예: 01012345678>', 'admin', 'active', 'core', now(), now()
+   from auth.users where email = '<대표 Gmail>'
+   returning id, name;
    ```
-4. 새로고침하면 대표 화면(`/admin`)이 열린다.
+   이메일을 모르면 "아직 가입 신청 전이에요" 화면의 **내 계정 ID 보기**로 ID를 받아 `where id = '<계정 ID>'`로 바꿔 실행해도 된다.
+3. 대표가 새로고침하면 대표 화면(`/admin`)이 열린다.
 
 ### 10. 직접 해 보기
 1. 대표 화면 > 초대 링크에서 링크를 만들고 복사한다.
@@ -179,6 +182,9 @@ npm run dev
 6. 대표: 정산 메뉴에서 지급일을 고르고 "이체 파일 받기" → 은행 대량이체 → 고른 사람을 "지급 완료로 바꾸기". 회원에게 알림이 가고 회원 정산 내역에 나온다.
 
 ---
+
+## 연습 데이터 지우기
+시범 사용 전과 실제 운영 직전에 `supabase/scripts/reset_test_data.sql`을 SQL Editor에서 실행한다. 관리자 계정·설정·★기본 단가·기본 계약서 양식만 남기고 일정·회원·정산 등을 지운다. 되돌릴 수 없다.
 
 ## 검사 명령
 코드를 고친 뒤 올리기 전에 실행한다.
