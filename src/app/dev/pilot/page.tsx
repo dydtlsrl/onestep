@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { requireAdmin } from "@/lib/auth";
+import { requireDeveloper } from "@/lib/auth";
+import { reportLoadError } from "@/lib/error-log";
 import { EVENT_STATUS_LABEL, formatEventRange, type EventStatus } from "@/lib/events";
 import { formatDate, formatDateTime } from "@/lib/format";
 import {
@@ -43,6 +43,7 @@ interface MemberRow {
   created_at: string;
   approved_at: string | null;
   invite_id: string | null;
+  private_updated_at: string | null;
 }
 
 interface ApplicationRow {
@@ -60,6 +61,19 @@ interface ContractRow {
   requested_at: string;
   signed_at: string | null;
 }
+
+// dev_pilot_source()가 돌려주는 모양
+interface PilotSource {
+  settings: unknown;
+  events: EventRow[];
+  invites: InviteRow[];
+  members: MemberRow[];
+  applications: ApplicationRow[];
+  contracts: ContractRow[];
+  edited_payments: string[];
+}
+
+const EMPTY_SOURCE: PilotSource = { settings: null, events: [], invites: [], members: [], applications: [], contracts: [], edited_payments: [] };
 
 const STATUS_STYLE: Record<MetricStatus, { label: string; className: string }> = {
   met: { label: "목표 달성", className: "bg-brand-soft text-brand-strong" },
@@ -102,83 +116,58 @@ function Section({ title, help, children }: { title: string; help?: string; chil
 const th = "px-3 py-3 font-bold";
 const td = "px-3 py-3";
 
-// 시범 운영 지표 (PRD 9장). 시범 일정·초대 링크를 고르면 가입·신청·계약·처리 시간을 자동으로 계산한다.
+// 시범 운영 지표 (PRD 9장, 개발자만). 시범 일정·초대 링크를 고르면 가입·신청·계약·처리 시간을 자동으로 계산한다.
 export default async function PilotPage() {
-  const { supabase } = await requireAdmin();
+  const { supabase } = await requireDeveloper("/dev/pilot");
+  // 개발자는 회원 표를 직접 못 읽는다. DB 함수가 필요한 칸만 모아 준다 (전화번호·주민번호·계좌 없음).
+  const { data, error } = await supabase.rpc("dev_pilot_source");
+  await reportLoadError("/dev/pilot", error);
+  const source = (data as PilotSource | null) ?? EMPTY_SOURCE;
 
-  const [{ data: setting }, { data: eventData }, { data: inviteData }] = await Promise.all([
-    supabase.from("app_settings").select("value").eq("key", "pilot").maybeSingle<{ value: unknown }>(),
-    supabase
-      .from("events")
-      .select("id, title, start_date, end_date, status, created_at")
-      .neq("status", "draft")
-      .order("start_date", { ascending: false })
-      .limit(200)
-      .returns<EventRow[]>(),
-    supabase.from("invites").select("id, memo, used_count, created_at").order("created_at", { ascending: false }).limit(200).returns<InviteRow[]>(),
-  ]);
-
-  const settings = parsePilotSettings(setting?.value);
-  const allEvents = eventData ?? [];
-  const invites = inviteData ?? [];
+  const settings = parsePilotSettings(source.settings);
+  const allEvents = source.events;
+  const invites = source.invites;
 
   // 지워진 일정·링크는 건너뛴다 (연습 데이터 지우기 뒤)
   const chosenEvents = allEvents.filter((e) => settings.eventIds.includes(e.id));
   const events = chosenEvents.length > 0 ? chosenEvents : allEvents.filter((e) => e.status !== "cancelled");
-  const eventIds = events.map((e) => e.id);
+  const eventIds = new Set(events.map((e) => e.id));
   const chosenInvites = invites.filter((i) => settings.inviteIds.includes(i.id));
+  const chosenInviteIds = new Set(chosenInvites.map((i) => i.id));
   const inviteCreatedAt = new Map(invites.map((i) => [i.id, i.created_at]));
 
-  let memberQuery = supabase
-    .from("profiles")
-    .select("id, name, status, created_at, approved_at, invite_id")
-    .eq("role", "member")
-    .order("created_at", { ascending: true })
-    .limit(1000);
-  if (chosenInvites.length > 0) memberQuery = memberQuery.in("invite_id", chosenInvites.map((i) => i.id));
-
-  const none = Promise.resolve({ data: [] as never[] });
-  const [{ data: memberData }, { data: privateData }, { data: appData }, { data: contractData }, { data: paymentData }] = await Promise.all([
-    memberQuery.returns<MemberRow[]>(),
-    supabase.from("member_private").select("member_id, updated_at").returns<{ member_id: string; updated_at: string }[]>(),
-    eventIds.length
-      ? supabase.from("applications").select("event_id, member_id, status, added_by_admin, decided_at").in("event_id", eventIds).returns<ApplicationRow[]>()
-      : none,
-    eventIds.length
-      ? supabase.from("contracts").select("event_id, member_id, status, requested_at, signed_at").in("event_id", eventIds).returns<ContractRow[]>()
-      : none,
-    eventIds.length
-      ? supabase.from("payments").select("event_id").in("event_id", eventIds).eq("edited", true).neq("status", "cancelled").returns<{ event_id: string }[]>()
-      : none,
-  ]);
-
-  const privateAt = new Map((privateData ?? []).map((p) => [p.member_id, p.updated_at]));
   const signups = summarizeSignups(
-    (memberData ?? []).map((m) => ({
-      id: m.id,
-      name: m.name,
-      status: m.status,
-      createdAt: m.created_at,
-      approvedAt: m.approved_at,
-      inviteCreatedAt: m.invite_id ? (inviteCreatedAt.get(m.invite_id) ?? null) : null,
-      privateUpdatedAt: privateAt.get(m.id) ?? null,
-    })),
+    source.members
+      .filter((m) => chosenInviteIds.size === 0 || (m.invite_id !== null && chosenInviteIds.has(m.invite_id)))
+      .map((m) => ({
+        id: m.id,
+        name: m.name,
+        status: m.status,
+        createdAt: m.created_at,
+        approvedAt: m.approved_at,
+        inviteCreatedAt: m.invite_id ? (inviteCreatedAt.get(m.invite_id) ?? null) : null,
+        privateUpdatedAt: m.private_updated_at,
+      })),
   );
 
-  const applications = (appData ?? []).map((a) => ({
-    eventId: a.event_id,
-    memberId: a.member_id,
-    status: a.status,
-    addedByAdmin: a.added_by_admin,
-    decidedAt: a.decided_at,
-  }));
-  const contracts: ContractInput[] = (contractData ?? []).map((c) => ({
-    eventId: c.event_id,
-    memberId: c.member_id,
-    status: c.status,
-    requestedAt: c.requested_at,
-    signedAt: c.signed_at,
-  }));
+  const applications = source.applications
+    .filter((a) => eventIds.has(a.event_id))
+    .map((a) => ({
+      eventId: a.event_id,
+      memberId: a.member_id,
+      status: a.status,
+      addedByAdmin: a.added_by_admin,
+      decidedAt: a.decided_at,
+    }));
+  const contracts: ContractInput[] = source.contracts
+    .filter((c) => eventIds.has(c.event_id))
+    .map((c) => ({
+      eventId: c.event_id,
+      memberId: c.member_id,
+      status: c.status,
+      requestedAt: c.requested_at,
+      signedAt: c.signed_at,
+    }));
   const now = new Date();
 
   const applyAll = summarizeApplications(applications);
@@ -191,7 +180,7 @@ export default async function PilotPage() {
   }));
   const average = averageMinutes(perEvent.map((p) => p.duration));
   const doneEvents = perEvent.filter((p) => p.duration.minutes !== null).length;
-  const editedPayments = (paymentData ?? []).length;
+  const editedPayments = source.edited_payments.filter((id) => eventIds.has(id)).length;
 
   const signupBase = settings.invitedCount ?? signups.applied;
   const signupStatus = settings.invitedCount === null ? "none" : rateStatus(signups.completedInTime, signupBase, PILOT_TARGET.signupRate);
@@ -213,9 +202,10 @@ export default async function PilotPage() {
         </p>
       </div>
 
-      {!setting && (
+      {error && (
         <div className="rounded-lg bg-warn-soft px-4 py-3 text-sm leading-relaxed text-warn">
-          시범 운영 설정이 아직 없어요. Supabase SQL Editor에서 <code>20261105000000_pilot_metrics.sql</code>(10번)을 실행해야 값을 저장할 수 있어요. 자동 지표는 지금도 볼 수 있어요.
+          지표 재료를 불러오지 못했어요. Supabase SQL Editor에서 <code>20261105000000_pilot_metrics.sql</code>(10번)과{" "}
+          <code>20261106000000_dev_console.sql</code>(11번)을 실행했는지 확인해 주세요.
         </div>
       )}
       <p className="text-[13px] text-muted">
@@ -295,9 +285,7 @@ export default async function PilotPage() {
                 {perEvent.map(({ event, apply, sign, duration }) => (
                   <tr key={event.id} className="border-b border-[#eef0f3] last:border-0">
                     <td className={`stack-first ${td}`}>
-                      <Link href={`/admin/events/${event.id}`} className="font-bold underline-offset-4 hover:underline max-md:underline">
-                        {event.title}
-                      </Link>
+                      <span className="font-bold">{event.title}</span>
                       <div className="text-[13px] text-muted">{formatEventRange(event.start_date, event.end_date)}</div>
                     </td>
                     <td data-label="앱 신청" className={td}>
@@ -364,9 +352,7 @@ export default async function PilotPage() {
                   {signups.rows.map((r) => (
                     <tr key={r.id} className="border-b border-[#eef0f3] last:border-0">
                       <td className={`stack-first ${td}`}>
-                        <Link href={`/admin/members/${r.id}`} className="font-bold underline-offset-4 hover:underline max-md:underline">
-                          {r.name}
-                        </Link>
+                        <span className="font-bold">{r.name}</span>
                       </td>
                       <td data-label="가입 신청" className={`whitespace-nowrap ${td}`}>{formatDateTime(r.createdAt)}</td>
                       <td data-label="승인" className={`whitespace-nowrap ${td}`}>{r.approvedAt ? formatDateTime(r.approvedAt) : "—"}</td>

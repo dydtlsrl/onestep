@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { z } from "zod";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { createClient } from "@/lib/supabase/server";
 
 export interface SignState {
@@ -29,7 +29,7 @@ export async function signContract(_prev: SignState, formData: FormData): Promis
     p_ip: ip,
     p_user_agent: userAgent,
   });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   revalidatePath(`/contracts/${id.data}`);
   revalidatePath("/contracts");

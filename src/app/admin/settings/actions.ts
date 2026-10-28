@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { createClient } from "@/lib/supabase/server";
 
 export interface SettingState {
@@ -15,7 +15,7 @@ export interface SettingState {
 async function save(key: string, value: Record<string, unknown>, reason: string): Promise<SettingState> {
   const supabase = await createClient();
   const { error } = await supabase.rpc("update_setting", { p_key: key, p_value: value, p_reason: reason });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
   revalidatePath("/admin/settings");
   revalidatePath("/admin/payments");
   revalidatePath("/admin/events", "layout");

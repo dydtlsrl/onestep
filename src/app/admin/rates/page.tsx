@@ -4,6 +4,7 @@ import { parsePayRules } from "@/lib/pay";
 import { PayCalculator } from "./pay-calculator";
 import { PayRulesForm } from "./pay-rules-form";
 import { CreateRoleForm, RoleItem, type RoleRow } from "./rate-forms";
+import { reportLoadError } from "@/lib/error-log";
 
 interface SettingRow {
   value: unknown;
@@ -42,6 +43,7 @@ export default async function RatesPage() {
   const nextOrder = roles.reduce((max, r) => Math.max(max, r.sort_order), 0) + 1;
   const activeRoles = roles.filter((r) => r.is_active);
 
+  await reportLoadError("/admin/rates", error);
   return (
     <>
       <div className="flex flex-col gap-1">

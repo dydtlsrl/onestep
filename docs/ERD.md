@@ -267,6 +267,8 @@ erDiagram
 | `audit_logs` | 민감정보 열람, 이체 엑셀 다운로드, 등급·제한 변경 기록 | `id`, `actor_id`, `action`, `target_type`, `target_id`, `detail` (jsonb), `created_at` |
 | `member_note_counts` (보기) | 회원별 노쇼·지각 횟수. 호출한 사람의 권한으로 계산 (`security_invoker`) | `member_id`, `no_show_count`, `late_count`, `last_note_at` |
 | `member_participation` (보기) | 회원별 참여 횟수 (참석·지각한 날이 하루라도 있는 일정 수). `security_invoker` | `member_id`, `attended_count` |
+| `developers` | 개발자 화면(`/dev`)을 볼 로그인 계정. 회원(profiles)이 아니어도 된다. SQL로만 넣는다 | `user_id` (PK), `note`, `created_at` |
+| `app_errors` | 오류 기록 (서버·버튼·브라우저·로그인). 개발자만 함수로 읽는다. 180일 뒤 지움 | `id`, `created_at`, `user_id`, `source`, `level` (error·warn), `code`, `message`, `path`, `digest`, `user_agent`, `detail` (jsonb), `resolved_at`, `resolved_note` |
 | `clients` (나중에) | 고객사 목록. MVP에서는 일정마다 `event_internal.client_name`에 이름만 적는다. 반복 고객이 많아지면 만든다 | `id`, `name`, `contact_name`, `contact_phone`, `memo` |
 
 ## 2. 설계 원칙
@@ -326,7 +328,8 @@ erDiagram
 | `payments` | 읽기 (저장·상태 변경은 함수로) | 자기 내역 읽기 (확정 전 금액은 화면에서 숨김) | 불가 |
 | `payment_items` | 읽기 | 자기 정산의 항목 읽기 | 불가 |
 | `notifications` | 생성 | 자기 알림 읽기·읽음 처리 | 불가 |
-| `app_settings` | 전체 | 보수 계산 규칙(`pay_rules`)만 읽기 (예상 보수 표시용) | 같음 |
+| `app_settings` | 시범 지표(`pilot`)를 뺀 전체. `pilot`은 개발자만 | 보수 계산 규칙(`pay_rules`)만 읽기 (예상 보수 표시용) | 같음 |
+| `developers`, `app_errors` | 불가 (개발자는 아래 `dev_` 함수로만) | 불가 | 불가 |
 | `app_settings_history` | 읽기 | 불가 | 불가 |
 | `audit_logs` | 읽기 (쓰기는 서버만) | 불가 | 불가 |
 | `member_note_counts` | 읽기 | 불가 (0행) | 불가 |
@@ -387,7 +390,7 @@ erDiagram
 
 | 함수 | 누가 | 하는 일 |
 |---|---|---|
-| `update_setting(key, value, reason)` | 대표 | `company`(회사 정보), `contract`(주민번호 표시), `tax`(세목·과세최저한·교통비 포함), `pilot`(시범 운영 지표: 대상 일정·초대 링크 ID, 초대 인원, 기존 처리 시간(분), 목표 감소율, 인터뷰 응답·사고 건수, 메모, 10번 파일) 저장. 값 모양 확인, 버전·이력·기록 |
+| `update_setting(key, value, reason)` | 대표 (`pilot`만 개발자) | `company`(회사 정보), `contract`(주민번호 표시), `tax`(세목·과세최저한·교통비 포함) 저장. `pilot`(시범 운영 지표: 대상 일정·초대 링크 ID, 초대 인원, 기존 처리 시간(분), 목표 감소율, 인터뷰 응답·사고 건수, 메모)은 개발자만 (10·11번 파일). 값 모양 확인, 버전·이력·기록 |
 | `admin_private_secrets(member_ids, purpose)` | 대표 | 암호문 받기 (`view`, `transfer`, `contract`). 열람 기록 |
 | `my_private_secrets()` | 회원 | 자기 암호문 받기 (계약서 주민번호 전체 표시용) |
 | `save_contract_template(title, body)` | 대표 | 양식을 새 버전으로 저장 |
@@ -403,3 +406,13 @@ erDiagram
 
 **세금 계산** (`src/lib/tax.ts`): 기타소득은 지급액의 8%(필요경비 60% 뒤 20%), 지급액 125,000원 이하면 0원(과세최저한). 사업소득은 3%, 소득세 1,000원 미만이면 0원(소액부징수). 지방소득세는 소득세의 10%. 10원 미만 버림. 교통비·지방비를 넣을지는 설정으로 고른다. 세목은 세무사 확인 전까지 "아직 정하지 않음"이다.
 
+## 7. DB 함수 (개발자 화면)
+`20261106000000_dev_console.sql`. 개발자는 회원 표를 직접 못 읽고, 함수가 필요한 칸만 준다 (전화번호·주민번호·계좌·서명 없음).
+
+| 함수 | 누가 | 하는 일 |
+|---|---|---|
+| `is_developer()` | 로그인한 사람 | `developers`에 있는지 |
+| `log_app_error(source, level, code, message, path, digest, user_agent, detail)` | 누구나 (로그인 전 포함) | 오류 남기기. 길이를 자르고 틀린 값은 고쳐 넣음. 1분 120건·한 사람 30건·하루 5,000건이 넘으면 건너뜀. 가끔 180일 지난 기록 지움 |
+| `dev_errors(days)` | 개발자 | 최근 며칠 오류 (최대 1,000건), 겪은 사람의 이름·역할 붙임 |
+| `dev_resolve_errors(ids, resolved, note)` | 개발자 | 처리함 표시·되돌리기 |
+| `dev_pilot_source()` | 개발자 | 시범 지표 재료: 설정, 공개한 일정, 초대 링크, 회원(이름·상태·가입·승인·정산 정보 등록 시각), 신청, 계약 상태·시각, 직접 고친 정산 |

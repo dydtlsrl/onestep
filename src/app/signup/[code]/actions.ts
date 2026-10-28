@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { readSignupForm, type SignupInput } from "@/lib/signup-schema";
 import { createClient } from "@/lib/supabase/server";
 
@@ -45,7 +45,7 @@ export async function submitApplication(_prev: SignupState, formData: FormData):
     p_privacy_agreed: true,
   });
 
-  if (error) return { error: messageForError(error), values };
+  if (error) return { error: await actionError(error), values };
 
   redirect("/pending");
 }

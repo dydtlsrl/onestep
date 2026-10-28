@@ -4,6 +4,7 @@ import { formatDate } from "@/lib/format";
 import { getSiteUrl } from "@/lib/site-url";
 import { setInviteActive } from "./actions";
 import { CreateInviteForm } from "./create-invite-form";
+import { reportLoadError } from "@/lib/error-log";
 
 interface InviteRow {
   id: string;
@@ -43,6 +44,7 @@ export default async function InvitesPage() {
   const { supabase } = await requireAdmin();
   const [{ invites, error }, siteUrl] = await Promise.all([loadInvites(supabase), getSiteUrl()]);
 
+  await reportLoadError("/admin/invites", error);
   return (
     <>
       <div className="flex flex-col gap-1">

@@ -10,6 +10,7 @@ import {
   type TierFilter,
 } from "@/lib/members";
 import { formatPhone, normalizePhone } from "@/lib/phone";
+import { reportLoadError } from "@/lib/error-log";
 
 interface MemberRow {
   id: string;
@@ -69,6 +70,7 @@ export default async function MembersPage({
   const members = data ?? [];
   const countByMember = new Map((counts ?? []).map((c) => [c.member_id, c]));
 
+  await reportLoadError("/admin/members", error);
   return (
     <>
       <div className="flex flex-col gap-1">

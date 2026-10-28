@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { firstIssueMessage, readEventForm, toEventRpcArgs } from "@/lib/event-form";
 import { createClient } from "@/lib/supabase/server";
 
@@ -32,7 +32,7 @@ export async function createEvent(_prev: EventActionState, formData: FormData): 
     p_client_name: args.clientName,
     p_internal_memo: args.memo,
   });
-  if (error || typeof data !== "string") return { error: messageForError(error) };
+  if (error || typeof data !== "string") return { error: await actionError(error) };
 
   refresh();
   redirect(`/admin/events/${data}`);
@@ -54,7 +54,7 @@ export async function updateEvent(_prev: EventActionState, formData: FormData): 
     p_client_name: args.clientName,
     p_internal_memo: args.memo,
   });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(id.data);
   return { ok: "일정을 저장했어요." };
@@ -70,7 +70,7 @@ export async function changeEventStatus(_prev: EventActionState, formData: FormD
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_event_status", { p_event_id: id.data, p_status: status.data, p_reason: reason });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(id.data);
   return {};
@@ -84,7 +84,7 @@ export async function decideApplications(_prev: EventActionState, formData: Form
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("decide_applications", { p_application_ids: ids.data, p_status: status.data });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(eventId.data);
   return {};
@@ -102,7 +102,7 @@ export async function addMemberToEvent(_prev: EventActionState, formData: FormDa
     p_day_id: dayId.data,
     p_member_id: memberId.data,
   });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(eventId.data);
   return { ok: "확정자로 넣었어요. 선발 결과 알림을 보내면 그 회원에게도 알림이 가요." };
@@ -125,7 +125,7 @@ export async function saveApplicationDetail(_prev: EventActionState, formData: F
     p_role_name: roleName.data,
     p_rate_override: rate,
   });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(eventId.data);
   return { ok: "저장했어요." };
@@ -137,7 +137,7 @@ export async function notifyResults(_prev: EventActionState, formData: FormData)
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("notify_selection_results", { p_event_id: eventId.data });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(eventId.data);
   return { ok: data ? `${data}명에게 알림을 보냈어요.` : "새로 알릴 사람이 없어요." };
@@ -157,7 +157,7 @@ export async function saveAttendance(_prev: EventActionState, formData: FormData
     p_attendance: attendance.data,
     p_overtime_minutes: minutes.data,
   });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(eventId.data);
   return { ok: "저장" };

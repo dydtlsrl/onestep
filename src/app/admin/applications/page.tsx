@@ -2,6 +2,7 @@ import { PROFILE_COLUMNS, requireAdmin, type Profile } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { formatPhone } from "@/lib/phone";
 import { DecisionForms } from "./decision-forms";
+import { reportLoadError } from "@/lib/error-log";
 
 type PendingProfile = Profile & { invites: { memo: string } | null };
 
@@ -17,6 +18,7 @@ export default async function ApplicationsPage() {
 
   const pending = data ?? [];
 
+  await reportLoadError("/admin/applications", error);
   return (
     <>
       <div className="flex flex-col gap-1">

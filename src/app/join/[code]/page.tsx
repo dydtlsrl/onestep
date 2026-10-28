@@ -5,6 +5,7 @@ import { InvalidInvite } from "@/components/invalid-invite";
 import { OAuthButtons } from "@/components/oauth-buttons";
 import { Card, PageShell } from "@/components/page-shell";
 import { getCurrentMember } from "@/lib/auth";
+import { reportError } from "@/lib/error-log";
 import { detectInAppBrowser } from "@/lib/in-app-browser";
 import { LOGIN_METHOD_LABEL } from "@/lib/login-providers";
 import { isInviteUsable } from "@/lib/invites";
@@ -15,7 +16,11 @@ export default async function JoinPage({ params }: { params: Promise<{ code: str
   const { supabase, userId, profile } = await getCurrentMember();
 
   if (userId && profile) redirect("/");
-  if (!(await isInviteUsable(supabase, code))) return <InvalidInvite />;
+  if (!(await isInviteUsable(supabase, code))) {
+    // 만료·꺼진 링크로 들어온 사람 (가입 흐름에서 막힌 곳)
+    await reportError({ source: "server", level: "warn", code: "INVITE_INVALID", message: "쓸 수 없는 초대 링크로 접속", path: "/join" });
+    return <InvalidInvite />;
+  }
   if (userId) redirect(`/signup/${code}`);
 
   const inApp = detectInAppBrowser((await headers()).get("user-agent"));

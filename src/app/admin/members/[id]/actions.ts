@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { decryptPii } from "@/lib/crypto";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { createClient } from "@/lib/supabase/server";
 
 export interface MemberActionState {
@@ -27,7 +27,7 @@ export async function setTier(_prev: MemberActionState, formData: FormData): Pro
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_member_tier", { p_member_id: id.data, p_tier: tier.data });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(id.data);
   return { ok: "등급을 저장했어요." };
@@ -43,7 +43,7 @@ export async function setMemberRate(_prev: MemberActionState, formData: FormData
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_member_rate", { p_member_id: id.data, p_rate: rate });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(id.data);
   return { ok: rate === null ? "기본 시급을 비웠어요. 일정 단가를 써요." : "기본 시급을 저장했어요." };
@@ -57,7 +57,7 @@ export async function restrictMember(_prev: MemberActionState, formData: FormDat
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("restrict_member", { p_member_id: id.data, p_reason: reason });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(id.data);
   return { ok: "활동을 제한했어요." };
@@ -69,7 +69,7 @@ export async function unrestrictMember(_prev: MemberActionState, formData: FormD
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("unrestrict_member", { p_member_id: id.data });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(id.data);
   return { ok: "제한을 풀었어요." };
@@ -121,7 +121,7 @@ export async function revealPrivate(_prev: RevealState, formData: FormData): Pro
   if (!id.success) return { error: "잘못된 요청이에요." };
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("admin_private_secrets", { p_member_ids: [id.data], p_purpose: "view" });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
   const row = (data as { rrn_enc: string; account_enc: string }[] | null)?.[0];
   if (!row) return { error: "등록된 정산 정보가 없어요." };
   try {

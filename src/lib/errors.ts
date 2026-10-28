@@ -36,8 +36,14 @@ const MESSAGES: Record<string, string> = {
   PRIVATE_REQUIRED: "서명하기 전에 주민등록번호와 계좌를 먼저 등록해 주세요.",
   SIGNATURE_REQUIRED: "서명란에 서명해 주세요.",
   PAYMENT_LOCKED: "지급 완료되었거나 보류 중인 정산은 고칠 수 없어요. 보류를 먼저 풀어 주세요.",
+  NOT_DEVELOPER: "개발자 계정만 할 수 있어요.",
   PII_KEY_MISSING: "암호화 키(PII_ENCRYPTION_KEY)가 설정되지 않았어요. 대표님께 알려 주세요.",
 };
+
+// 앱이 사용자에게 안내하는 오류 코드인지 (모르는 오류는 버그일 수 있다)
+export function isKnownError(code: string): boolean {
+  return Object.hasOwn(MESSAGES, code);
+}
 
 export function messageForError(error: { message?: string } | null | undefined): string {
   const code = error?.message?.trim() ?? "";

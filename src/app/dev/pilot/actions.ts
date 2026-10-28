@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { createClient } from "@/lib/supabase/server";
 
 export interface PilotState {
@@ -73,7 +73,7 @@ const FIELDS = [
   "note",
 ] as const;
 
-// 시범 대상(일정·초대 링크)과 앱 밖의 값을 저장한다. DB 함수(update_setting)가 대표인지와 값 모양을 다시 확인한다.
+// 시범 대상(일정·초대 링크)과 앱 밖의 값을 저장한다. DB 함수(update_setting)가 개발자인지와 값 모양을 다시 확인한다.
 export async function savePilot(_prev: PilotState, formData: FormData): Promise<PilotState> {
   const parsed = schema.safeParse(Object.fromEntries(FIELDS.map((k) => [k, String(formData.get(k) ?? "")])));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message };
@@ -98,7 +98,7 @@ export async function savePilot(_prev: PilotState, formData: FormData): Promise<
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("update_setting", { p_key: "pilot", p_value: value, p_reason: "시범 운영 지표" });
-  if (error) return { error: messageForError(error) };
-  revalidatePath("/admin/pilot");
+  if (error) return { error: await actionError(error) };
+  revalidatePath("/dev/pilot");
   return { ok: "저장했어요." };
 }

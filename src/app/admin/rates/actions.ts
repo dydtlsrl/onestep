@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { createClient } from "@/lib/supabase/server";
 
 export interface RateState {
@@ -145,7 +145,7 @@ export async function updatePayRules(_prev: RateState, formData: FormData): Prom
     p_reason: parsed.data.reason,
     p_default_hourly_rate: parsed.data.hourlyRate,
   });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   revalidatePath("/admin/rates");
   return { ok: "계산 규칙을 저장했어요." };

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { createClient } from "@/lib/supabase/server";
 
 export interface TemplateState {
@@ -18,7 +18,7 @@ export async function saveTemplate(_prev: TemplateState, formData: FormData): Pr
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("save_contract_template", { p_title: title, p_body: body });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
   revalidatePath("/admin/contracts");
   return { ok: `${data}번째 양식으로 저장했어요. 이제부터 보내는 계약서에 쓰여요.` };
 }

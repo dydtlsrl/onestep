@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { createClient } from "@/lib/supabase/server";
 
 export interface DecisionState {
@@ -19,7 +19,7 @@ export async function approveApplication(_prev: DecisionState, formData: FormDat
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("approve_member", { p_member_id: memberId.data, p_tier: tier });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   revalidatePath("/admin", "layout");
   return {};
@@ -33,7 +33,7 @@ export async function rejectApplication(_prev: DecisionState, formData: FormData
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("reject_member", { p_member_id: memberId.data, p_reason: reason });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   revalidatePath("/admin", "layout");
   return {};

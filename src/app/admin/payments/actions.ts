@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { createClient } from "@/lib/supabase/server";
 
 export interface PayStatusState {
@@ -23,7 +23,7 @@ export async function setPaymentStatus(_prev: PayStatusState, formData: FormData
 
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("set_payment_status", { p_payment_ids: ids.data, p_status: status.data, p_reason: reason });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
   revalidatePath("/admin/payments");
   revalidatePath("/admin/events", "layout");
   const skipped = ids.data.length - Number(data ?? 0);
