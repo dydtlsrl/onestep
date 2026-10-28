@@ -23,7 +23,7 @@ const FLOWS: [RegExp, string][] = [
   [/^\/(withdraw|privacy)(\/|$)/, "탈퇴·처리방침"],
   [/^\/admin\/events(\/|$)/, "대표: 일정·선발·계약"],
   [/^\/admin\/payments(\/|$)/, "대표: 정산"],
-  [/^\/admin\/(applications|members|invites)(\/|$)/, "대표: 회원·가입 승인"],
+  [/^\/admin\/(applications|members|invites|roster)(\/|$)/, "대표: 회원·가입 승인"],
   [/^\/admin\/(rates|contracts|settings)(\/|$)/, "대표: 단가·양식·설정"],
   [/^\/admin(\/|$)/, "대표: 기타"],
   [/^\/dev(\/|$)/, "개발자 화면"],

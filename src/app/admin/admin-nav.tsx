@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
 // 회원은 회원 목록·가입 승인·초대 링크를 탭으로 묶은 한 화면이다 (also: 그 탭들의 주소)
 const LINKS: { href: string; label: string; also?: string[] }[] = [
   { href: "/admin/events", label: "일정" },
-  { href: "/admin/members", label: "회원", also: ["/admin/applications", "/admin/invites"] },
+  { href: "/admin/members", label: "회원", also: ["/admin/applications", "/admin/invites", "/admin/roster"] },
   { href: "/admin/payments", label: "정산" },
   { href: "/admin/rates", label: "단가표" },
   { href: "/admin/contracts", label: "계약서 양식" },

@@ -76,6 +76,9 @@ erDiagram
         int used_count "사용 횟수"
         timestamptz expires_at "만료 시각"
         boolean is_active "사용 가능 여부"
+        boolean roster_only "명단에 있는 번호만 가입 (13번)"
+        text roster_list "그 명단 이름 (비면 모든 명단)"
+        uuid roster_id FK "개인 링크: 그 사람 번호만 (명단에서 지우면 링크 꺼짐)"
         uuid created_by FK
         timestamptz created_at
     }
@@ -270,6 +273,7 @@ erDiagram
 | `audit_logs` | 민감정보 열람, 이체 엑셀 다운로드, 등급·제한 변경 기록 | `id`, `actor_id`, `action`, `target_type`, `target_id`, `detail` (jsonb), `created_at` |
 | `member_note_counts` (보기) | 회원별 노쇼·지각 횟수. 호출한 사람의 권한으로 계산 (`security_invoker`) | `member_id`, `no_show_count`, `late_count`, `last_note_at` |
 | `member_participation` (보기) | 회원별 참여 횟수 (참석·지각한 날이 하루라도 있는 일정 수). `security_invoker` | `member_id`, `attended_count` |
+| `roster` | 기존 인력 명단 (MEM-07). 대표만. 초대·가입 대조용, 가입 뒤 대표가 지움 | `id`, `list_name`, `name`, `phone` (UK), `tier`, `memo`, `created_by`, `created_at`, `updated_at` |
 | `developers` | 개발자 화면(`/dev`)을 볼 로그인 계정. 회원(profiles)이 아니어도 된다. SQL로만 넣는다 | `user_id` (PK), `note`, `created_at` |
 | `app_errors` | 오류 기록 (서버·버튼·브라우저·로그인). 개발자만 함수로 읽는다. 180일 뒤 지움 | `id`, `created_at`, `user_id`, `source`, `level` (error·warn), `code`, `message`, `path`, `digest`, `user_agent`, `detail` (jsonb), `resolved_at`, `resolved_note` |
 | `clients` (나중에) | 고객사 목록. MVP에서는 일정마다 `event_internal.client_name`에 이름만 적는다. 반복 고객이 많아지면 만든다 | `id`, `name`, `contact_name`, `contact_phone`, `memo` |
@@ -430,3 +434,10 @@ erDiagram
 | `purge_expired_private()` | 로그인한 사람 | 탈퇴한 회원의 정산 정보 중 보관 기한이 지난 것 삭제 (탈퇴할 때마다 함께 돎) |
 | `submit_application(...)` | 로그인한 사람 | (바뀜) 탈퇴한 사람이 같은 계정으로 다시 신청하면 같은 ID로 승인 대기가 됨. 휴대폰 중복은 탈퇴하지 않은 다른 회원과만 비교 |
 | `public_company_info()` | 누구나 | 처리방침에 넣을 회사 이름·대표자·주소·연락처 |
+
+## 9. 기존 인력 명단 (13번)
+`20261108000000_roster.sql`. 명단(`roster`)은 대표만 읽고 쓴다 (RLS). 명단을 지우면 그 사람의 개인 링크가 꺼진다 (트리거).
+
+| 함수 | 누가 | 하는 일 |
+|---|---|---|
+| `submit_application(...)` | 로그인한 사람 | (바뀜) 개인 링크는 그 명단 줄의 번호로만, `roster_only` 단체 링크는 그 명단(`roster_list`, 비면 모든 명단)에 있는 번호로만 가입. 아니면 `NOT_ON_ROSTER` |
