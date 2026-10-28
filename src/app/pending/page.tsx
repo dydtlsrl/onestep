@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { Card, Notice, PageShell } from "@/components/page-shell";
+import Link from "next/link";
+import { Card, Notice, PageShell, PrivacyLink } from "@/components/page-shell";
 import { SignOutButton } from "@/components/sign-out-button";
 import { getCurrentMember, type MemberStatus } from "@/lib/auth";
 
@@ -18,7 +19,7 @@ const COPY: Record<Exclude<MemberStatus, "active">, { title: string; body: strin
   },
   withdrawn: {
     title: "탈퇴한 계정이에요",
-    body: "다시 활동하려면 원스텝 대표님께 문의해 주세요.",
+    body: "다시 활동하려면 대표님께 받은 초대 링크로 다시 가입 신청해 주세요.",
   },
 };
 
@@ -38,7 +39,15 @@ export default async function PendingPage() {
         <p className="text-[15px] leading-relaxed text-body">{copy.body}</p>
         {profile.status === "pending" && <Notice>{profile.name}님의 신청서를 대표님이 확인하고 있어요.</Notice>}
       </Card>
-      <SignOutButton />
+      <div className="flex flex-wrap items-center gap-x-4">
+        <SignOutButton />
+        {profile.status !== "withdrawn" && (
+          <Link href="/withdraw" className="inline-flex min-h-10 items-center text-sm text-muted underline underline-offset-4 hover:text-ink">
+            {profile.status === "pending" ? "가입 신청 취소 (탈퇴)" : "탈퇴하기"}
+          </Link>
+        )}
+        <PrivacyLink />
+      </div>
     </PageShell>
   );
 }

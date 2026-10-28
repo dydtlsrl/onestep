@@ -33,7 +33,7 @@ erDiagram
     profiles {
         uuid id PK "로그인 계정 ID"
         text name "이름"
-        text phone UK "휴대폰 번호"
+        text phone UK "휴대폰 번호 (탈퇴하지 않은 회원끼리 중복 불가)"
         int default_rate "회원 기본 시급 (대표가 정함, 비면 일정 단가)"
         text gender "성별 (SET-08을 켤 때 추가)"
         text region "활동 가능 지역"
@@ -48,6 +48,8 @@ erDiagram
         text status_reason "거절·제한 사유 (회원에게 안 보임)"
         timestamptz privacy_agreed_at "개인정보 동의 시각"
         timestamptz approved_at "승인 시각"
+        timestamptz withdrawn_at "탈퇴 시각"
+        text withdraw_reason "탈퇴 사유"
         uuid approved_by FK "승인한 관리자"
         timestamptz created_at
         timestamptz updated_at
@@ -62,6 +64,7 @@ erDiagram
         text account_masked "계좌번호 표시용 (****1234)"
         text account_holder "예금주"
         text address "주소"
+        date retain_until "탈퇴 후 보관 기한 (보수를 받은 사람만)"
         timestamptz updated_at
     }
 
@@ -73,6 +76,9 @@ erDiagram
         int used_count "사용 횟수"
         timestamptz expires_at "만료 시각"
         boolean is_active "사용 가능 여부"
+        boolean roster_only "명단에 있는 번호만 가입 (13번)"
+        text roster_list "그 명단 이름 (비면 모든 명단)"
+        uuid roster_id FK "개인 링크: 그 사람 번호만 (명단에서 지우면 링크 꺼짐)"
         uuid created_by FK
         timestamptz created_at
     }
@@ -267,6 +273,9 @@ erDiagram
 | `audit_logs` | 민감정보 열람, 이체 엑셀 다운로드, 등급·제한 변경 기록 | `id`, `actor_id`, `action`, `target_type`, `target_id`, `detail` (jsonb), `created_at` |
 | `member_note_counts` (보기) | 회원별 노쇼·지각 횟수. 호출한 사람의 권한으로 계산 (`security_invoker`) | `member_id`, `no_show_count`, `late_count`, `last_note_at` |
 | `member_participation` (보기) | 회원별 참여 횟수 (참석·지각한 날이 하루라도 있는 일정 수). `security_invoker` | `member_id`, `attended_count` |
+| `roster` | 기존 인력 명단 (MEM-07). 대표만. 초대·가입 대조용, 가입 뒤 대표가 지움 | `id`, `list_name`, `name`, `phone` (UK), `tier`, `memo`, `created_by`, `created_at`, `updated_at` |
+| `developers` | 개발자 화면(`/dev`)을 볼 로그인 계정. 회원(profiles)이 아니어도 된다. SQL로만 넣는다 | `user_id` (PK), `note`, `created_at` |
+| `app_errors` | 오류 기록 (서버·버튼·브라우저·로그인). 개발자만 함수로 읽는다. 180일 뒤 지움 | `id`, `created_at`, `user_id`, `source`, `level` (error·warn), `code`, `message`, `path`, `digest`, `user_agent`, `detail` (jsonb), `resolved_at`, `resolved_note` |
 | `clients` (나중에) | 고객사 목록. MVP에서는 일정마다 `event_internal.client_name`에 이름만 적는다. 반복 고객이 많아지면 만든다 | `id`, `name`, `contact_name`, `contact_phone`, `memo` |
 
 ## 2. 설계 원칙
@@ -326,7 +335,8 @@ erDiagram
 | `payments` | 읽기 (저장·상태 변경은 함수로) | 자기 내역 읽기 (확정 전 금액은 화면에서 숨김) | 불가 |
 | `payment_items` | 읽기 | 자기 정산의 항목 읽기 | 불가 |
 | `notifications` | 생성 | 자기 알림 읽기·읽음 처리 | 불가 |
-| `app_settings` | 전체 | 보수 계산 규칙(`pay_rules`)만 읽기 (예상 보수 표시용) | 같음 |
+| `app_settings` | 시범 지표(`pilot`)를 뺀 전체. `pilot`은 개발자만 | 보수 계산 규칙(`pay_rules`)만 읽기 (예상 보수 표시용) | 같음 |
+| `developers`, `app_errors` | 불가 (개발자는 아래 `dev_` 함수로만) | 불가 | 불가 |
 | `app_settings_history` | 읽기 | 불가 | 불가 |
 | `audit_logs` | 읽기 (쓰기는 서버만) | 불가 | 불가 |
 | `member_note_counts` | 읽기 | 불가 (0행) | 불가 |
@@ -387,7 +397,7 @@ erDiagram
 
 | 함수 | 누가 | 하는 일 |
 |---|---|---|
-| `update_setting(key, value, reason)` | 대표 | `company`(회사 정보), `contract`(주민번호 표시), `tax`(세목·과세최저한·교통비 포함) 저장. 값 모양 확인, 버전·이력·기록 |
+| `update_setting(key, value, reason)` | 대표 (`pilot`만 개발자) | `company`(회사 정보), `contract`(주민번호 표시), `tax`(세목·과세최저한·교통비 포함) 저장. `pilot`(시범 운영 지표: 대상 일정·초대 링크 ID, 초대 인원, 기존 처리 시간(분), 목표 감소율, 인터뷰 응답·사고 건수, 메모)은 개발자만 (10·11번 파일). 값 모양 확인, 버전·이력·기록 |
 | `admin_private_secrets(member_ids, purpose)` | 대표 | 암호문 받기 (`view`, `transfer`, `contract`). 열람 기록 |
 | `my_private_secrets()` | 회원 | 자기 암호문 받기 (계약서 주민번호 전체 표시용) |
 | `save_contract_template(title, body)` | 대표 | 양식을 새 버전으로 저장 |
@@ -403,3 +413,41 @@ erDiagram
 
 **세금 계산** (`src/lib/tax.ts`): 기타소득은 지급액의 8%(필요경비 60% 뒤 20%), 지급액 125,000원 이하면 0원(과세최저한). 사업소득은 3%, 소득세 1,000원 미만이면 0원(소액부징수). 지방소득세는 소득세의 10%. 10원 미만 버림. 교통비·지방비를 넣을지는 설정으로 고른다. 세목은 세무사 확인 전까지 "아직 정하지 않음"이다.
 
+## 7. DB 함수 (개발자 화면)
+`20261106000000_dev_console.sql`. 개발자는 회원 표를 직접 못 읽고, 함수가 필요한 칸만 준다 (전화번호·주민번호·계좌·서명 없음).
+
+| 함수 | 누가 | 하는 일 |
+|---|---|---|
+| `is_developer()` | 로그인한 사람 | `developers`에 있는지 |
+| `log_app_error(source, level, code, message, path, digest, user_agent, detail)` | 누구나 (로그인 전 포함) | 오류 남기기. 길이를 자르고 틀린 값은 고쳐 넣음. 1분 120건·한 사람 30건·하루 5,000건이 넘으면 건너뜀. 가끔 180일 지난 기록 지움 |
+| `dev_errors(days)` | 개발자 | 최근 며칠 오류 (최대 1,000건), 겪은 사람의 이름·역할 붙임 |
+| `dev_resolve_errors(ids, resolved, note)` | 개발자 | 처리함 표시·되돌리기 |
+| `dev_pilot_source()` | 개발자 | 시범 지표 재료: 설정, 공개한 일정, 초대 링크, 회원(이름·상태·가입·승인·정산 정보 등록 시각), 신청, 계약 상태·시각, 직접 고친 정산 |
+
+## 8. DB 함수 (회원 탈퇴, 처리방침)
+`20261107000000_privacy_withdrawal.sql`.
+
+| 함수 | 누가 | 하는 일 |
+|---|---|---|
+| `withdraw_blocker(member_id)` | 본인, 대표 | 탈퇴를 막는 이유: `HAS_UPCOMING_WORK`(끝나지 않은 확정 일정), `HAS_PENDING_PAYMENT`(정산·지급 전 보수). 없으면 null |
+| `withdraw_member(member_id, reason)` | 본인, 대표 (대표 계정은 불가) | 처리 전 신청 취소, 서명 전 계약 무효, 관리자 기록·알림 삭제, 지역·경력·추천인 비움. 정산 정보는 받은 보수가 없으면 삭제, 있으면 `retain_until`(마지막 지급일이 속한 해 + 5년, 12월 31일)까지 보관. 이름·휴대폰·서명한 계약·지급 기록은 남김. 본인이 탈퇴하면 대표에게 알림 |
+| `purge_expired_private()` | 로그인한 사람 | 탈퇴한 회원의 정산 정보 중 보관 기한이 지난 것 삭제 (탈퇴할 때마다 함께 돎) |
+| `submit_application(...)` | 로그인한 사람 | (바뀜) 탈퇴한 사람이 같은 계정으로 다시 신청하면 같은 ID로 승인 대기가 됨. 휴대폰 중복은 탈퇴하지 않은 다른 회원과만 비교 |
+| `public_company_info()` | 누구나 | 처리방침에 넣을 회사 이름·대표자·주소·연락처 |
+
+## 9. 기존 인력 명단 (13번)
+`20261108000000_roster.sql`. 명단(`roster`)은 대표만 읽고 쓴다 (RLS). 명단을 지우면 그 사람의 개인 링크가 꺼진다 (트리거).
+
+| 함수 | 누가 | 하는 일 |
+|---|---|---|
+| `submit_application(...)` | 로그인한 사람 | (바뀜) 개인 링크는 그 명단 줄의 번호로만, `roster_only` 단체 링크는 그 명단(`roster_list`, 비면 모든 명단)에 있는 번호로만 가입. 아니면 `NOT_ON_ROSTER` |
+
+## 10. 리뷰 반영 (14번)
+`20261109000000_review_fixes_2.sql`.
+
+| 바뀐 것 | 내용 |
+|---|---|
+| `withdraw_member(member_id, reason, force)` | `force`는 대표만: 받을 보수가 남은 것으로 보이지만(정산을 안 만든 지난 일정) 실제로 없을 때 `HAS_PENDING_PAYMENT`를 넘긴다. 기록(`audit_logs.detail.forced`)에 남음 |
+| `roster.list_name` | 비울 수 없음 (빈 이름은 초대 링크에서 "모든 명단"이라는 뜻이라 섞이지 않게). 기존 빈 이름은 "기본 명단" |
+| `submit_application(...)` | 다시 가입하면 `default_rate`·`created_at`을 초기화하고 정산 정보의 `retain_until`을 없앰 |
+| `log_app_error(...)` | 한도를 나눔: 로그인 전 1분 30건·하루 1,000건 / 로그인한 사람 한 사람 1분 30건·모두 하루 5,000건 |

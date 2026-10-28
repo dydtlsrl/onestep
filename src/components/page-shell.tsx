@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 // 회원 화면의 기본 틀: 휴대폰 폭에 맞춘 가운데 정렬 카드. actions는 머리글 오른쪽(알림 등)에 놓는다.
 export function PageShell({ children, actions }: { children: React.ReactNode; actions?: React.ReactNode }) {
   return (
@@ -18,4 +20,13 @@ export function Card({ children }: { children: React.ReactNode }) {
 export function Notice({ tone = "info", children }: { tone?: "info" | "warn"; children: React.ReactNode }) {
   const color = tone === "warn" ? "bg-warn-soft text-warn" : "bg-brand-soft text-brand-strong";
   return <div className={`rounded-lg px-4 py-3 text-sm leading-relaxed ${color}`}>{children}</div>;
+}
+
+// 화면 아래쪽에 두는 개인정보 처리방침 링크
+export function PrivacyLink() {
+  return (
+    <Link href="/privacy" className="inline-flex min-h-10 items-center self-start text-[13px] text-muted underline underline-offset-4 hover:text-ink">
+      개인정보 처리방침
+    </Link>
+  );
 }

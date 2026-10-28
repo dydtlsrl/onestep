@@ -13,6 +13,7 @@ import {
   type EventStatus,
   type EventType,
 } from "@/lib/events";
+import { reportLoadError } from "@/lib/error-log";
 
 interface ListRow {
   id: string;
@@ -47,6 +48,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   const { data, error } = await loadEvents(supabase, past);
   const events = data ?? [];
 
+  await reportLoadError("/admin/events", error);
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">

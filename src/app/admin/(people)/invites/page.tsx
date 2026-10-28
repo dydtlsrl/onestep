@@ -4,6 +4,7 @@ import { formatDate } from "@/lib/format";
 import { getSiteUrl } from "@/lib/site-url";
 import { setInviteActive } from "./actions";
 import { CreateInviteForm } from "./create-invite-form";
+import { reportLoadError } from "@/lib/error-log";
 
 interface InviteRow {
   id: string;
@@ -14,6 +15,8 @@ interface InviteRow {
   expires_at: string | null;
   is_active: boolean;
   created_at: string;
+  roster_only: boolean;
+  roster_list: string;
 }
 
 function inviteState(invite: InviteRow, now: number) {
@@ -31,7 +34,9 @@ type Supabase = Awaited<ReturnType<typeof requireAdmin>>["supabase"];
 async function loadInvites(supabase: Supabase) {
   const { data, error } = await supabase
     .from("invites")
-    .select("id, code, memo, max_uses, used_count, expires_at, is_active, created_at")
+    .select("id, code, memo, max_uses, used_count, expires_at, is_active, created_at, roster_only, roster_list")
+    // 사람마다 만든 개인 링크는 명단으로 초대 탭에서 본다
+    .is("roster_id", null)
     .order("created_at", { ascending: false })
     .returns<InviteRow[]>();
   const now = Date.now();
@@ -43,12 +48,10 @@ export default async function InvitesPage() {
   const { supabase } = await requireAdmin();
   const [{ invites, error }, siteUrl] = await Promise.all([loadInvites(supabase), getSiteUrl()]);
 
+  await reportLoadError("/admin/invites", error);
   return (
     <>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">초대 링크</h1>
-        <p className="text-sm text-muted">링크를 받은 사람만 가입 신청을 할 수 있어요. 가입은 대표가 승인해야 끝나요.</p>
-      </div>
+      <p className="text-sm text-muted">링크를 받은 사람만 가입 신청을 할 수 있어요. 가입은 대표가 승인해야 끝나요.</p>
 
       <CreateInviteForm />
 
@@ -63,6 +66,11 @@ export default async function InvitesPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-bold">{invite.memo || "메모 없음"}</span>
                 <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${state.className}`}>{state.label}</span>
+                {invite.roster_only && (
+                  <span className="rounded-md border border-line px-2 py-0.5 text-xs text-body">
+                    명단 번호만{invite.roster_list && ` · ${invite.roster_list}`}
+                  </span>
+                )}
                 <span className="ml-auto text-sm text-muted">
                   가입 {invite.used_count}
                   {invite.max_uses !== null ? ` / ${invite.max_uses}` : ""}명 ·{" "}

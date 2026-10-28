@@ -143,7 +143,10 @@ export function SignupForm({ code }: { code: string }) {
         </dl>
         <p className="text-[13px] leading-relaxed text-muted">
           동의하지 않을 수 있지만, 동의하지 않으면 가입할 수 없어요. 주민등록번호와 계좌번호는 지금 받지 않고, 첫 계약서
-          서명 때 따로 받아요.
+          서명 때 따로 받아요.{" "}
+          <a href="/privacy" target="_blank" rel="noopener" className="text-brand underline underline-offset-4">
+            개인정보 처리방침 전체 보기
+          </a>
         </p>
         <label htmlFor="privacy" className="flex min-h-11 cursor-pointer items-center gap-3">
           <input

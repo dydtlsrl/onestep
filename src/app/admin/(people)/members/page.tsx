@@ -10,6 +10,7 @@ import {
   type TierFilter,
 } from "@/lib/members";
 import { formatPhone, normalizePhone } from "@/lib/phone";
+import { reportLoadError } from "@/lib/error-log";
 
 interface MemberRow {
   id: string;
@@ -69,12 +70,10 @@ export default async function MembersPage({
   const members = data ?? [];
   const countByMember = new Map((counts ?? []).map((c) => [c.member_id, c]));
 
+  await reportLoadError("/admin/members", error);
   return (
     <>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">회원</h1>
-        <p className="text-sm text-muted">이름을 누르면 등급 변경, 활동 제한, 관리자 기록을 볼 수 있어요.</p>
-      </div>
+      <p className="text-sm text-muted">이름을 누르면 등급 변경, 활동 제한, 관리자 기록을 볼 수 있어요.</p>
 
       <form method="get" className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-white p-4">
         <div className="flex flex-[2_1_220px] flex-col gap-1.5">

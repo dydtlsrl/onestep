@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { encryptPii, hasPiiKey } from "@/lib/crypto";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { maskAccount, maskRrn, readPrivateForm } from "@/lib/private-form";
 import { createClient } from "@/lib/supabase/server";
 
@@ -13,12 +13,12 @@ export interface PrivateState {
 
 // 주민번호·계좌번호는 여기(서버)에서 암호화한 뒤에 DB로 보낸다. 원래 값은 저장하지 않는다.
 export async function savePrivateInfo(_prev: PrivateState, formData: FormData): Promise<PrivateState> {
-  if (!hasPiiKey()) return { error: messageForError({ message: "PII_KEY_MISSING" }) };
+  if (!hasPiiKey()) return { error: await actionError({ message: "PII_KEY_MISSING" }) };
 
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub;
-  if (!userId) return { error: messageForError({ message: "NOT_AUTHENTICATED" }) };
+  if (!userId) return { error: await actionError({ message: "NOT_AUTHENTICATED" }) };
 
   const { data: existing } = await supabase.from("member_private").select("member_id").eq("member_id", userId).maybeSingle();
   const { data, error: formError } = readPrivateForm(formData, existing !== null);
@@ -37,7 +37,7 @@ export async function savePrivateInfo(_prev: PrivateState, formData: FormData): 
   const { error } = existing
     ? await supabase.from("member_private").update(row).eq("member_id", userId)
     : await supabase.from("member_private").insert({ member_id: userId, ...row });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   revalidatePath("/me");
   revalidatePath("/contracts", "layout");

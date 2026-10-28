@@ -1,5 +1,5 @@
 // 지금 로그인한 사람과 회원 정보를 읽는다. 서버에서만 쓴다.
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { MemberTier } from "@/lib/tier";
@@ -63,4 +63,20 @@ export async function requireMember(path = "/") {
   if (!member.profile) redirect("/");
   if (member.profile.status !== "active") redirect("/pending");
   return member as typeof member & { userId: string; profile: Profile };
+}
+
+// 개발자 화면(/dev) 앞에서 부른다. 개발자는 회원 정보가 없어도 된다 (developers 표에 등록된 로그인 계정).
+// 개발자가 아니면 화면이 있다는 것도 알리지 않는다 (404).
+const isDeveloper = cache(async () => {
+  const { supabase, userId } = await getCurrentMember();
+  if (!userId) return false;
+  const { data } = await supabase.rpc("is_developer");
+  return data === true;
+});
+
+export async function requireDeveloper(path = "/dev") {
+  const member = await getCurrentMember();
+  if (!member.userId) redirect(`/login?next=${encodeURIComponent(path)}`);
+  if (!(await isDeveloper())) notFound();
+  return member as typeof member & { userId: string };
 }

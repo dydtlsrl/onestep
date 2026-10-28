@@ -5,7 +5,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { approveApplication, rejectApplication, type DecisionState } from "./actions";
 
 // 신청서 한 장의 승인·거절 버튼
-export function DecisionForms({ memberId, name }: { memberId: string; name: string }) {
+// defaultTier: 명단에 있는 사람이면 명단의 등급을 미리 골라 둔다
+export function DecisionForms({ memberId, name, defaultTier = "general" }: { memberId: string; name: string; defaultTier?: "core" | "general" }) {
   const [approveState, approveAction] = useActionState<DecisionState, FormData>(approveApplication, {});
   const [rejectState, rejectAction] = useActionState<DecisionState, FormData>(rejectApplication, {});
   const [rejecting, setRejecting] = useState(false);
@@ -18,11 +19,11 @@ export function DecisionForms({ memberId, name }: { memberId: string; name: stri
         <fieldset className="flex items-center gap-4">
           <legend className="sr-only">{name}님의 등급</legend>
           <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
-            <input type="radio" name="tier" value="general" defaultChecked className="h-4 w-4 accent-brand" />
+            <input type="radio" name="tier" value="general" defaultChecked={defaultTier === "general"} className="h-4 w-4 accent-brand" />
             일반
           </label>
           <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
-            <input type="radio" name="tier" value="core" className="h-4 w-4 accent-brand" />
+            <input type="radio" name="tier" value="core" defaultChecked={defaultTier === "core"} className="h-4 w-4 accent-brand" />
             핵심
           </label>
         </fieldset>

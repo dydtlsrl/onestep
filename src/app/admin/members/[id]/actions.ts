@@ -3,12 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { decryptPii } from "@/lib/crypto";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { createClient } from "@/lib/supabase/server";
 
 export interface MemberActionState {
   error?: string;
   ok?: string;
+  needsForce?: boolean; // 탈퇴 처리: 받을 보수가 남았다고 막혔을 때 확인 체크를 보여 준다
 }
 
 const memberId = z.uuid();
@@ -27,7 +28,7 @@ export async function setTier(_prev: MemberActionState, formData: FormData): Pro
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_member_tier", { p_member_id: id.data, p_tier: tier.data });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(id.data);
   return { ok: "등급을 저장했어요." };
@@ -43,7 +44,7 @@ export async function setMemberRate(_prev: MemberActionState, formData: FormData
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("set_member_rate", { p_member_id: id.data, p_rate: rate });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(id.data);
   return { ok: rate === null ? "기본 시급을 비웠어요. 일정 단가를 써요." : "기본 시급을 저장했어요." };
@@ -57,7 +58,7 @@ export async function restrictMember(_prev: MemberActionState, formData: FormDat
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("restrict_member", { p_member_id: id.data, p_reason: reason });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(id.data);
   return { ok: "활동을 제한했어요." };
@@ -69,7 +70,7 @@ export async function unrestrictMember(_prev: MemberActionState, formData: FormD
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("unrestrict_member", { p_member_id: id.data });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
 
   refresh(id.data);
   return { ok: "제한을 풀었어요." };
@@ -121,7 +122,7 @@ export async function revealPrivate(_prev: RevealState, formData: FormData): Pro
   if (!id.success) return { error: "잘못된 요청이에요." };
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("admin_private_secrets", { p_member_ids: [id.data], p_purpose: "view" });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
   const row = (data as { rrn_enc: string; account_enc: string }[] | null)?.[0];
   if (!row) return { error: "등록된 정산 정보가 없어요." };
   try {
@@ -129,4 +130,21 @@ export async function revealPrivate(_prev: RevealState, formData: FormData): Pro
   } catch {
     return { error: "암호를 풀지 못했어요. 암호화 키(PII_ENCRYPTION_KEY)가 저장할 때와 같은지 확인해 주세요." };
   }
+}
+
+// 회원이 전화 등으로 탈퇴를 요청했을 때 대표가 대신 처리한다. 지울 것·남길 것은 본인 탈퇴와 같다.
+export async function withdrawMember(_prev: MemberActionState, formData: FormData): Promise<MemberActionState> {
+  const id = memberId.safeParse(formData.get("memberId"));
+  if (!id.success) return { error: "잘못된 요청이에요." };
+  if (formData.get("confirm") !== "on") return { error: "회원이 탈퇴를 요청했는지 확인하고 체크해 주세요." };
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 200);
+
+  const supabase = await createClient();
+  // p_force는 14번 SQL에서 생긴 값이라, 체크했을 때만 보낸다 (14번 전에도 보통 탈퇴 처리는 되게)
+  const force = formData.get("force") === "on";
+  const { error } = await supabase.rpc("withdraw_member", { p_member_id: id.data, p_reason: reason, ...(force ? { p_force: true } : {}) });
+  if (error) return { error: await actionError(error), needsForce: error.message === "HAS_PENDING_PAYMENT" };
+
+  refresh(id.data);
+  return { ok: "탈퇴 처리했어요." };
 }

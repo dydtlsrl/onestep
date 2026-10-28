@@ -1,13 +1,10 @@
 import { requireAdmin } from "@/lib/auth";
 import { AdminNav } from "./admin-nav";
+import { getPendingCount } from "./pending-count";
 
 // 대표 화면의 공통 틀: 왼쪽 메뉴 + 오른쪽 내용 (휴대폰에서는 메뉴가 위로 올라간다)
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { supabase, profile } = await requireAdmin();
-  const { count } = await supabase
-    .from("profiles")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "pending");
+  const [{ profile }, pendingCount] = await Promise.all([requireAdmin(), getPendingCount()]);
 
   const signOut = (className: string) => (
     <form action="/auth/signout" method="post" className={className}>
@@ -27,7 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
           {signOut("md:hidden")}
         </div>
-        <AdminNav pendingCount={count ?? 0} />
+        <AdminNav pendingCount={pendingCount} />
         {signOut("mt-auto hidden px-3 md:block")}
       </nav>
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-8">

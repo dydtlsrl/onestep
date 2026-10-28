@@ -11,9 +11,9 @@ const MESSAGES: Record<string, string> = {
   PHONE_TAKEN: "이미 가입된 휴대폰 번호예요. 다른 방법(카카오/구글)으로 가입한 적이 있는지 확인해 주세요.",
   NOT_ADMIN: "대표 계정만 할 수 있어요.",
   NOT_PENDING: "이미 처리된 가입 신청이에요. 화면을 새로고침해 주세요.",
-  MEMBER_NOT_FOUND: "활동 중이거나 제한된 회원만 등급을 바꿀 수 있어요.",
+  MEMBER_NOT_FOUND: "회원을 찾을 수 없거나, 지금 상태에서는 할 수 없어요. 화면을 새로고침해 주세요.",
   REASON_REQUIRED: "제한 사유를 적어 주세요. (500자까지)",
-  CANNOT_TARGET_ADMIN: "대표 계정은 제한할 수 없어요.",
+  CANNOT_TARGET_ADMIN: "대표 계정은 제한하거나 탈퇴시킬 수 없어요.",
   NOT_ACTIVE: "활동 중인 회원만 제한할 수 있어요. 화면을 새로고침해 주세요.",
   NOT_RESTRICTED: "제한된 회원이 아니에요. 화면을 새로고침해 주세요.",
   SETTING_NOT_FOUND: "설정이 아직 없어요. 마이그레이션 파일을 모두 적용했는지 확인해 주세요.",
@@ -36,8 +36,19 @@ const MESSAGES: Record<string, string> = {
   PRIVATE_REQUIRED: "서명하기 전에 주민등록번호와 계좌를 먼저 등록해 주세요.",
   SIGNATURE_REQUIRED: "서명란에 서명해 주세요.",
   PAYMENT_LOCKED: "지급 완료되었거나 보류 중인 정산은 고칠 수 없어요. 보류를 먼저 풀어 주세요.",
+  NOT_DEVELOPER: "개발자 계정만 할 수 있어요.",
+  NOT_ALLOWED: "이 계정으로는 할 수 없어요.",
+  HAS_UPCOMING_WORK: "확정된 일정이 아직 남아 있어요. 대표님께 먼저 말씀해 주세요.",
+  HAS_PENDING_PAYMENT: "아직 받지 않은 보수가 있어요. 지급이 끝난 뒤에 탈퇴할 수 있어요.",
+  ALREADY_WITHDRAWN: "이미 탈퇴한 계정이에요.",
+  NOT_ON_ROSTER: "이 초대 링크는 대표님 명단에 있는 휴대폰 번호로만 가입할 수 있어요. 번호를 다시 확인하거나 대표님께 문의해 주세요.",
   PII_KEY_MISSING: "암호화 키(PII_ENCRYPTION_KEY)가 설정되지 않았어요. 대표님께 알려 주세요.",
 };
+
+// 앱이 사용자에게 안내하는 오류 코드인지 (모르는 오류는 버그일 수 있다)
+export function isKnownError(code: string): boolean {
+  return Object.hasOwn(MESSAGES, code);
+}
 
 export function messageForError(error: { message?: string } | null | undefined): string {
   const code = error?.message?.trim() ?? "";

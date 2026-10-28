@@ -11,7 +11,7 @@ export default async function SignupPage({ params }: { params: Promise<{ code: s
   const { supabase, userId, profile } = await getCurrentMember();
 
   if (!userId) redirect(`/join/${code}`);
-  if (profile) redirect("/");
+  if (profile && profile.status !== "withdrawn") redirect("/");
   if (!(await isInviteUsable(supabase, code))) return <InvalidInvite />;
 
   return (

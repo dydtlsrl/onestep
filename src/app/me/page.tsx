@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Card, PageShell } from "@/components/page-shell";
+import { Card, PageShell, PrivacyLink } from "@/components/page-shell";
 import { requireMember, TIER_LABEL } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { formatPhone } from "@/lib/phone";
@@ -56,6 +56,15 @@ export default async function MyInfoPage() {
         )}
         <PrivateInfoForm current={priv ?? null} defaultHolder={profile.name} />
       </Card>
+
+      <div className="flex flex-wrap items-center gap-x-4">
+        <PrivacyLink />
+        {profile.role !== "admin" && (
+          <Link href="/withdraw" className="inline-flex min-h-10 items-center text-[13px] text-muted underline underline-offset-4 hover:text-ink">
+            회원 탈퇴
+          </Link>
+        )}
+      </div>
     </PageShell>
   );
 }

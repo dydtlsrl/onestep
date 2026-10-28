@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { placeholderValues, renderTemplate } from "@/lib/contract";
-import { messageForError } from "@/lib/errors";
+import { actionError } from "@/lib/error-log";
 import { sumItems, type PaymentItemKind } from "@/lib/settlement";
 import { contractTerms, loadSettlement, type MemberSettlement, type Settlement } from "@/lib/settlement-load";
 import { createClient } from "@/lib/supabase/server";
@@ -35,7 +35,7 @@ export async function requestContracts(_prev: SettleState, formData: FormData): 
     supabase.from("contract_templates").select("id, title, body").order("version", { ascending: false }).limit(1).maybeSingle<{ id: string; title: string; body: string }>(),
     supabase.from("contracts").select("member_id").eq("event_id", eventId.data).neq("status", "voided").returns<{ member_id: string }[]>(),
   ]);
-  if (!s) return { error: messageForError({ message: "EVENT_NOT_FOUND" }) };
+  if (!s) return { error: await actionError({ message: "EVENT_NOT_FOUND" }) };
   if (!template) return { error: "계약서 양식이 없어요. 마이그레이션 9를 적용했는지 확인해 주세요." };
 
   const sent = new Set((active ?? []).map((c) => c.member_id));
@@ -55,7 +55,7 @@ export async function requestContracts(_prev: SettleState, formData: FormData): 
     });
     if (error) {
       refresh(s.event.id);
-      return { error: `${m.name}님에게 보내다 멈췄어요 (${done}명 보냄): ${messageForError(error)}` };
+      return { error: `${m.name}님에게 보내다 멈췄어요 (${done}명 보냄): ${await actionError(error)}` };
     }
     done += 1;
   }
@@ -68,7 +68,7 @@ export async function remindContracts(_prev: SettleState, formData: FormData): P
   if (!eventId.success) return { error: "잘못된 요청이에요." };
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("remind_contracts", { p_event_id: eventId.data });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
   refresh(eventId.data);
   return { ok: data ? `서명하지 않은 ${data}명에게 다시 알렸어요.` : "서명을 기다리는 사람이 없어요." };
 }
@@ -81,7 +81,7 @@ export async function voidContract(_prev: SettleState, formData: FormData): Prom
   if (!reason) return { error: "무효로 하는 이유를 적어 주세요." };
   const supabase = await createClient();
   const { error } = await supabase.rpc("void_contract", { p_contract_id: contractId.data, p_reason: reason.slice(0, 300) });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
   refresh(eventId.data);
   return { ok: "무효로 했어요. 필요하면 다시 보낼 수 있어요." };
 }
@@ -118,7 +118,7 @@ export async function generatePayments(_prev: SettleState, formData: FormData): 
 
   const supabase = await createClient();
   const s = await loadSettlement(supabase, eventId.data);
-  if (!s) return { error: messageForError({ message: "EVENT_NOT_FOUND" }) };
+  if (!s) return { error: await actionError({ message: "EVENT_NOT_FOUND" }) };
   const { data: existing } = await supabase
     .from("payments")
     .select("member_id, status, edited, pay_date")
@@ -142,7 +142,7 @@ export async function generatePayments(_prev: SettleState, formData: FormData): 
     const { error } = await savePayment(supabase, s, m, m.actual.items, { payDate: p?.pay_date ?? s.payDate, edited: false, memo: "" });
     if (error) {
       refresh(s.event.id);
-      return { error: `${m.name}님 정산에서 멈췄어요 (${done}명 완료): ${messageForError(error)}` };
+      return { error: `${m.name}님 정산에서 멈췄어요 (${done}명 완료): ${await actionError(error)}` };
     }
     done += 1;
   }
@@ -178,10 +178,10 @@ export async function saveEditedPayment(_prev: SettleState, formData: FormData):
   const supabase = await createClient();
   const s = await loadSettlement(supabase, eventId.data);
   const m = s?.members.find((x) => x.memberId === memberId.data);
-  if (!s || !m) return { error: messageForError({ message: "NOT_SELECTED" }) };
+  if (!s || !m) return { error: await actionError({ message: "NOT_SELECTED" }) };
 
   const { error } = await savePayment(supabase, s, m, items.data, { payDate: payDate.data, edited: true, memo });
-  if (error) return { error: messageForError(error) };
+  if (error) return { error: await actionError(error) };
   refresh(s.event.id);
   return { ok: `${m.name}님 정산을 저장했어요.` };
 }

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { ErrorListener } from "@/components/error-listener";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -18,7 +19,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className="h-full antialiased">
-      <body className="flex min-h-full flex-col font-sans">{children}</body>
+      <body className="flex min-h-full flex-col font-sans">
+        <ErrorListener />
+        {children}
+      </body>
     </html>
   );
 }
