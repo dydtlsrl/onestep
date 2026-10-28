@@ -55,7 +55,8 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
     await member.locator("#privacy").check();
     await member.getByRole("button", { name: "가입 신청하기" }).click();
     await expect(member).toHaveURL(/\/pending/);
-    await expect(member.getByText("가입 신청이 완료되었어요")).toBeVisible();
+    // 제목으로 찾는다 (Next.js가 화면을 옮길 때 숨은 안내 칸에 같은 글자를 넣기 때문)
+    await expect(member.getByRole("heading", { name: "가입 신청이 완료되었어요" })).toBeVisible();
   });
 
   await test.step("대표: 핵심 인력으로 승인", async () => {

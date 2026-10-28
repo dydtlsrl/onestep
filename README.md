@@ -237,7 +237,7 @@ npm run dev
 `NEXT_PUBLIC_`으로 시작하는 환경변수는 빌드할 때 코드에 들어간다. 값을 바꾸면 다시 빌드해야 한다.
 
 ## 자동 검사 (GitHub Actions)
-`main`·작업 브랜치(`claude/...`)에 올리거나 PR을 만들 때마다 [.github/workflows/ci.yml](.github/workflows/ci.yml)이 자동으로 돈다. 결과는 GitHub 저장소의 **Actions** 탭이나 PR 아래 체크 표시에서 본다.
+PR을 만들거나 PR에 커밋을 더할 때, `main`에 합쳐질 때마다 [.github/workflows/ci.yml](.github/workflows/ci.yml)이 자동으로 돈다. (PR 없이 작업 브랜치에만 올린 커밋은 돌지 않는다. 필요하면 Actions 탭에서 **Run workflow**) 결과는 GitHub 저장소의 **Actions** 탭이나 PR 아래 체크 표시에서 본다.
 
 | 작업 | 하는 일 | 걸리는 시간 |
 |---|---|---|
