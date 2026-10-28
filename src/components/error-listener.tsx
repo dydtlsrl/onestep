@@ -1,14 +1,24 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { reportClientError } from "@/lib/client-error-action";
 
 const seen = new Set<string>();
 const MAX_PER_PAGE = 10;
 
-// 휴대폰·PC 브라우저에서 화면 밖으로 새어 나온 오류를 서버에 알린다. 같은 오류는 한 번만, 한 화면에 10건까지.
+function describe(value: unknown): string {
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value); // 순환 참조·BigInt 등
+  }
+}
+
+// 휴대폰·PC 브라우저에서 화면 밖으로 새어 나온 오류를 서버에 알린다. 한 화면에서 같은 오류는 한 번만, 10건까지.
 export function sendClientError(kind: "render" | "window" | "promise", error: unknown) {
-  const err = error instanceof Error ? error : new Error(typeof error === "string" ? error : JSON.stringify(error) ?? "알 수 없는 오류");
+  const err = error instanceof Error ? error : new Error(describe(error) || "알 수 없는 오류");
   const key = `${kind}|${err.name}|${err.message}`;
   if (seen.has(key) || seen.size >= MAX_PER_PAGE) return;
   seen.add(key);
@@ -29,6 +39,13 @@ function isNoise(event: ErrorEvent): boolean {
 }
 
 export function ErrorListener() {
+  const pathname = usePathname();
+
+  // 화면을 옮기면 한도와 중복 확인을 새로 시작한다
+  useEffect(() => {
+    seen.clear();
+  }, [pathname]);
+
   useEffect(() => {
     const onError = (event: ErrorEvent) => {
       if (!isNoise(event)) sendClientError("window", event.error ?? event.message);

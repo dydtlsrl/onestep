@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Card, Notice, PageShell } from "@/components/page-shell";
 import { getCurrentMember } from "@/lib/auth";
+import { reportLoadError } from "@/lib/error-log";
 import { messageForError } from "@/lib/errors";
 import { WithdrawForm } from "./withdraw-form";
 
@@ -12,10 +13,11 @@ export default async function WithdrawPage() {
   if (!profile || profile.status === "withdrawn") redirect("/");
   if (profile.role === "admin") redirect("/admin");
 
-  const [{ data: blocker }, { count: paidCount }] = await Promise.all([
+  const [{ data: blocker, error: blockerError }, { count: paidCount }] = await Promise.all([
     supabase.rpc("withdraw_blocker", { p_member_id: userId }),
     supabase.from("payments").select("id", { count: "exact", head: true }).eq("member_id", userId).eq("status", "paid"),
   ]);
+  await reportLoadError("/withdraw", blockerError);
   const back = profile.status === "active" ? "/me" : "/pending";
 
   return (
@@ -50,8 +52,13 @@ export default async function WithdrawPage() {
       </Card>
 
       <Card>
-        {blocker ? (
-          <Notice tone="warn">{messageForError({ message: String(blocker) })}</Notice>
+        {blockerError ? (
+          <Notice tone="warn">탈퇴할 수 있는지 확인하지 못했어요. 잠시 뒤 다시 열어 주세요.</Notice>
+        ) : blocker ? (
+          <Notice tone="warn">
+            {messageForError({ message: String(blocker) })}
+            {blocker === "HAS_PENDING_PAYMENT" && " 받을 보수가 없는데 이 안내가 보이면 대표님께 탈퇴를 요청해 주세요."}
+          </Notice>
         ) : (
           <WithdrawForm />
         )}

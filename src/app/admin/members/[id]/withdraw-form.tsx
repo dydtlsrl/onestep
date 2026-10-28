@@ -21,6 +21,14 @@ export function AdminWithdrawForm({ memberId }: { memberId: string }) {
           <input type="checkbox" name="confirm" required className="h-4 w-4 accent-brand" />
           회원 본인이 탈퇴를 요청했어요
         </label>
+        {state.needsForce && (
+          <label className="flex items-start gap-2 rounded-lg bg-warn-soft p-3 text-sm text-warn">
+            <input type="checkbox" name="force" className="mt-0.5 h-4 w-4 accent-brand" />
+            <span>
+              정산을 만들지 않은 지난 일정(연습 등)이 있어서 막혔어요. 이 회원에게 <b>받을 보수가 없는 것을 확인</b>했어요. (기록에 남아요)
+            </span>
+          </label>
+        )}
         <div>
           <SubmitButton variant="secondary" pendingText="처리 중…">
             탈퇴 처리

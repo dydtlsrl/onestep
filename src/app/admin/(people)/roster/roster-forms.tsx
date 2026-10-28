@@ -6,7 +6,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { formatPhone } from "@/lib/phone";
 import { inviteMessage, parseRoster, smsHref } from "@/lib/roster";
 import { TIER_LABEL } from "@/lib/tier";
-import { createGroupLink, createPersonalLink, importRoster, removeRosterRows, type LinkState, type RosterState } from "./actions";
+import { createGroupLink, createPersonalLink, importRoster, removeJoined, removeRosterRows, type LinkState, type RosterState } from "./actions";
 
 const field = "h-11 rounded-lg border border-field bg-white px-3 text-sm";
 
@@ -40,7 +40,7 @@ export function RosterImport({ lists }: { lists: string[] }) {
           <label htmlFor="listName" className="text-sm font-bold">
             명단 이름
           </label>
-          <input id="listName" name="listName" list="roster-lists" maxLength={40} placeholder="예: 핵심 인력, 전체 인력" className={field} />
+          <input id="listName" name="listName" list="roster-lists" required maxLength={40} placeholder="예: 핵심 인력, 전체 인력" className={field} />
           <datalist id="roster-lists">
             {lists.map((l) => (
               <option key={l} value={l} />
@@ -226,5 +226,21 @@ export function RemoveListForm({ listName, count }: { listName: string; count: n
         <Message state={state} />
       </form>
     </details>
+  );
+}
+
+// 가입이 끝난 사람을 명단에서 지운다 (회원 정보와 겹치는 개인정보 줄이기)
+export function RemoveJoinedForm({ count }: { count: number }) {
+  const [state, action] = useActionState<RosterState, FormData>(() => removeJoined(), {});
+  return (
+    <form action={action} className="flex flex-col gap-3 rounded-xl border border-line bg-white p-4 sm:flex-row sm:items-center">
+      <p className="flex-1 text-sm text-body">
+        가입한 {count}명은 회원 목록에 있어서 명단에 남겨 둘 필요가 없어요. 개인정보를 줄이려면 명단에서 지워 주세요.
+      </p>
+      <SubmitButton variant="secondary" pendingText="지우는 중…" className="h-10 self-start sm:self-auto">
+        가입한 {count}명 명단에서 지우기
+      </SubmitButton>
+      <Message state={state} />
+    </form>
   );
 }

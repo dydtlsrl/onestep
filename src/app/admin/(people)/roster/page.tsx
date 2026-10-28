@@ -3,8 +3,8 @@ import { requireAdmin, TIER_LABEL, type MemberStatus, type MemberTier } from "@/
 import { reportLoadError } from "@/lib/error-log";
 import { formatPhone } from "@/lib/phone";
 import { getSiteUrl } from "@/lib/site-url";
-import { removeJoined } from "./actions";
-import { GroupLinkForm, PersonalLink, RemoveListForm, RemoveRowButton, RosterImport } from "./roster-forms";
+import { memberStatusByPhone } from "./member-status";
+import { GroupLinkForm, PersonalLink, RemoveJoinedForm, RemoveListForm, RemoveRowButton, RosterImport } from "./roster-forms";
 
 interface RosterRow {
   id: string;
@@ -66,9 +66,8 @@ function memberStatus(status: MemberStatus | undefined): RowStatus | null {
 export default async function RosterPage({ searchParams }: { searchParams: Promise<{ list?: string; show?: string }> }) {
   const { supabase } = await requireAdmin();
   const params = await searchParams;
-  const [{ data, error }, { data: members }, { data: invites }, siteUrl] = await Promise.all([
+  const [{ data, error }, { data: invites }, siteUrl] = await Promise.all([
     supabase.from("roster").select("id, list_name, name, phone, tier, memo").order("list_name").order("name").limit(5000).returns<RosterRow[]>(),
-    supabase.from("profiles").select("phone, status").neq("status", "withdrawn").returns<{ phone: string; status: MemberStatus }[]>(),
     supabase
       .from("invites")
       .select("code, roster_id, used_count, max_uses, expires_at, is_active")
@@ -80,7 +79,8 @@ export default async function RosterPage({ searchParams }: { searchParams: Promi
   await reportLoadError("/admin/roster", error);
 
   const roster = data ?? [];
-  const statusByPhone = new Map((members ?? []).map((m) => [m.phone, m.status]));
+  const { map: statusByPhone, error: memberError } = await memberStatusByPhone(supabase, roster.map((r) => r.phone));
+  await reportLoadError("/admin/roster", memberError);
   const usableLink = usableLinks(invites ?? []);
 
   const rows = roster.map((r) => {
@@ -209,16 +209,7 @@ export default async function RosterPage({ searchParams }: { searchParams: Promi
             {visible.length === 0 && <li className="rounded-xl border border-line bg-white p-8 text-center text-[15px] text-muted">조건에 맞는 사람이 없어요.</li>}
           </ul>
 
-          {joinedCount > 0 && (
-            <form action={removeJoined} className="flex flex-col gap-3 rounded-xl border border-line bg-white p-4 sm:flex-row sm:items-center">
-              <p className="flex-1 text-sm text-body">
-                가입한 {joinedCount}명은 회원 목록에 있어서 명단에 남겨 둘 필요가 없어요. 개인정보를 줄이려면 명단에서 지워 주세요.
-              </p>
-              <button type="submit" className="h-10 self-start rounded-lg border border-field bg-white px-4 text-sm font-bold text-ink hover:bg-ground sm:self-auto">
-                가입한 {joinedCount}명 명단에서 지우기
-              </button>
-            </form>
-          )}
+          {joinedCount > 0 && <RemoveJoinedForm count={joinedCount} />}
         </section>
       )}
     </>

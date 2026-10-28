@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 export interface MemberActionState {
   error?: string;
   ok?: string;
+  needsForce?: boolean; // 탈퇴 처리: 받을 보수가 남았다고 막혔을 때 확인 체크를 보여 준다
 }
 
 const memberId = z.uuid();
@@ -139,8 +140,10 @@ export async function withdrawMember(_prev: MemberActionState, formData: FormDat
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 200);
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("withdraw_member", { p_member_id: id.data, p_reason: reason });
-  if (error) return { error: await actionError(error) };
+  // p_force는 14번 SQL에서 생긴 값이라, 체크했을 때만 보낸다 (14번 전에도 보통 탈퇴 처리는 되게)
+  const force = formData.get("force") === "on";
+  const { error } = await supabase.rpc("withdraw_member", { p_member_id: id.data, p_reason: reason, ...(force ? { p_force: true } : {}) });
+  if (error) return { error: await actionError(error), needsForce: error.message === "HAS_PENDING_PAYMENT" };
 
   refresh(id.data);
   return { ok: "탈퇴 처리했어요." };

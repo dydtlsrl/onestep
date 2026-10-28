@@ -2,11 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { chunk } from "@/lib/chunk";
 import { actionError } from "@/lib/error-log";
 import { generateInviteCode } from "@/lib/invite-code";
 import { parseRoster } from "@/lib/roster";
 import { getSiteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
+import { memberStatusByPhone } from "./member-status";
 
 // 아래 기능은 모두 DB 권한 규칙(RLS)이 대표인지 다시 확인한다
 
@@ -22,7 +24,9 @@ export interface LinkState {
 }
 
 const MAX_ROWS = 2000;
-const listName = z.string().trim().max(40, "명단 이름은 40자까지 쓸 수 있어요.");
+// 빈 이름은 초대 링크에서 "모든 명단"이라는 뜻이라 명단 이름은 꼭 정한다
+const listName = z.string().trim().min(1, "명단 이름을 적어 주세요. (예: 핵심 인력)").max(40, "명단 이름은 40자까지 쓸 수 있어요.");
+
 const days = z.enum(["3", "7", "14", "30"]);
 
 function refresh() {
@@ -45,14 +49,18 @@ export async function importRoster(_prev: RosterState, formData: FormData): Prom
   if (rows.length > MAX_ROWS) return { error: `한 번에 ${MAX_ROWS.toLocaleString()}명까지 넣을 수 있어요.` };
 
   const supabase = await createClient();
-  const { data: existing } = await supabase.from("roster").select("phone").in("phone", rows.map((r) => r.phone)).returns<{ phone: string }[]>();
+  let updated = 0;
+  for (const part of chunk(rows.map((r) => r.phone))) {
+    const { count, error } = await supabase.from("roster").select("id", { count: "exact", head: true }).in("phone", part);
+    if (error) return { error: await actionError(error) };
+    updated += count ?? 0;
+  }
   const { error } = await supabase
     .from("roster")
     .upsert(rows.map((r) => ({ ...r, list_name: list.data })), { onConflict: "phone" });
   if (error) return { error: await actionError(error) };
 
   refresh();
-  const updated = existing?.length ?? 0;
   return { ok: `${rows.length}명을 넣었어요.${updated ? ` (이미 있던 ${updated}명은 새 내용으로 고쳤어요)` : ""}` };
 }
 
@@ -64,12 +72,12 @@ export async function createGroupLink(_prev: LinkState, formData: FormData): Pro
   const rosterOnly = formData.get("rosterOnly") === "on";
 
   const supabase = await createClient();
-  const [{ data: rows }, { data: members }] = await Promise.all([
-    supabase.from("roster").select("phone").eq("list_name", list.data).returns<{ phone: string }[]>(),
-    supabase.from("profiles").select("phone").neq("status", "withdrawn").returns<{ phone: string }[]>(),
-  ]);
-  const joined = new Set((members ?? []).map((m) => m.phone));
-  const remaining = (rows ?? []).filter((r) => !joined.has(r.phone)).length;
+  const { data: rows, error: rowsError } = await supabase.from("roster").select("phone").eq("list_name", list.data).returns<{ phone: string }[]>();
+  if (rowsError) return { error: await actionError(rowsError) };
+  const phones = (rows ?? []).map((r) => r.phone);
+  const { map: joined, error: membersError } = await memberStatusByPhone(supabase, phones);
+  if (membersError) return { error: await actionError(membersError) };
+  const remaining = phones.filter((p) => !joined.has(p)).length;
   if (remaining === 0) return { error: "이 명단의 사람은 모두 가입 신청을 했어요." };
 
   const code = generateInviteCode();
@@ -115,14 +123,24 @@ export async function createPersonalLink(_prev: LinkState, formData: FormData): 
 }
 
 // 가입이 끝난(승인된) 사람은 회원 정보와 겹치므로 명단에서 지운다
-export async function removeJoined(): Promise<void> {
+export async function removeJoined(): Promise<RosterState> {
   const supabase = await createClient();
-  const { data: members } = await supabase.from("profiles").select("phone").in("status", ["active", "restricted"]).returns<{ phone: string }[]>();
-  const phones = (members ?? []).map((m) => m.phone);
-  for (let i = 0; i < phones.length; i += 200) {
-    await supabase.from("roster").delete().in("phone", phones.slice(i, i + 200));
+  const { data: rows, error } = await supabase.from("roster").select("phone").returns<{ phone: string }[]>();
+  if (error) return { error: await actionError(error) };
+  const { map, error: membersError } = await memberStatusByPhone(supabase, (rows ?? []).map((r) => r.phone));
+  if (membersError) return { error: await actionError(membersError) };
+  const joined = [...map].filter(([, status]) => status === "active" || status === "restricted").map(([phone]) => phone);
+  let removed = 0;
+  for (const part of chunk(joined)) {
+    const { error: deleteError, count } = await supabase.from("roster").delete({ count: "exact" }).in("phone", part);
+    if (deleteError) {
+      refresh();
+      return { error: `${removed}명만 지우고 멈췄어요. ${await actionError(deleteError)}` };
+    }
+    removed += count ?? 0;
   }
   refresh();
+  return { ok: `가입한 ${removed}명을 명단에서 지웠어요.` };
 }
 
 export async function removeRosterRows(_prev: RosterState, formData: FormData): Promise<RosterState> {

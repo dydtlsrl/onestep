@@ -441,3 +441,13 @@ erDiagram
 | 함수 | 누가 | 하는 일 |
 |---|---|---|
 | `submit_application(...)` | 로그인한 사람 | (바뀜) 개인 링크는 그 명단 줄의 번호로만, `roster_only` 단체 링크는 그 명단(`roster_list`, 비면 모든 명단)에 있는 번호로만 가입. 아니면 `NOT_ON_ROSTER` |
+
+## 10. 리뷰 반영 (14번)
+`20261109000000_review_fixes_2.sql`.
+
+| 바뀐 것 | 내용 |
+|---|---|
+| `withdraw_member(member_id, reason, force)` | `force`는 대표만: 받을 보수가 남은 것으로 보이지만(정산을 안 만든 지난 일정) 실제로 없을 때 `HAS_PENDING_PAYMENT`를 넘긴다. 기록(`audit_logs.detail.forced`)에 남음 |
+| `roster.list_name` | 비울 수 없음 (빈 이름은 초대 링크에서 "모든 명단"이라는 뜻이라 섞이지 않게). 기존 빈 이름은 "기본 명단" |
+| `submit_application(...)` | 다시 가입하면 `default_rate`·`created_at`을 초기화하고 정산 정보의 `retain_until`을 없앰 |
+| `log_app_error(...)` | 한도를 나눔: 로그인 전 1분 30건·하루 1,000건 / 로그인한 사람 한 사람 1분 30건·모두 하루 5,000건 |

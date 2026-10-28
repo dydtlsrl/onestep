@@ -21,7 +21,7 @@ insert into public.profiles (id, name, phone, role, status, tier, privacy_agreed
 
 select tests.act_as('00000000-0000-0000-0000-00000000008b');
 set role authenticated;
-select tests.expect_error($$insert into public.roster (name, phone) values ('몰래', '01097000099')$$, '%row-level security%');
+select tests.expect_error($$insert into public.roster (list_name, name, phone) values ('핵심 인력', '몰래', '01097000099')$$, '%row-level security%');
 reset role;
 
 select tests.act_as('00000000-0000-0000-0000-00000000008a');
@@ -30,8 +30,9 @@ insert into public.roster (list_name, name, phone, tier, memo) values
   ('핵심 인력', '명단가', '01097000003', 'core', '감독 10회'),
   ('핵심 인력', '명단나', '01097000005', 'core', ''),
   ('전체', '명단다', '01097000007', 'general', '');
-select tests.expect_error($$insert into public.roster (name, phone) values ('중복', '01097000003')$$, '%duplicate key%');
-select tests.expect_error($$insert into public.roster (name, phone) values ('번호틀림', '0212345678')$$, '%check%');
+select tests.expect_error($$insert into public.roster (list_name, name, phone) values ('핵심 인력', '중복', '01097000003')$$, '%duplicate key%');
+select tests.expect_error($$insert into public.roster (list_name, name, phone) values ('핵심 인력', '번호틀림', '0212345678')$$, '%check%');
+select tests.expect_error($$insert into public.roster (list_name, name, phone) values ('  ', '이름없는명단', '01097000098')$$, '%check%');
 -- 같은 번호를 다시 넣으면 고쳐 쓴다 (엑셀을 고쳐 다시 붙여 넣을 때)
 insert into public.roster (list_name, name, phone, tier) values ('핵심 인력', '명단가', '01097000003', 'general')
   on conflict (phone) do update set tier = excluded.tier;
