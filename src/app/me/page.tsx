@@ -16,7 +16,7 @@ export default async function MyInfoPage() {
 
   return (
     <PageShell>
-      <Link href="/" className="-mt-3 text-sm text-muted underline-offset-4 hover:underline">
+      <Link href="/" className="-mt-3 inline-flex min-h-10 items-center self-start text-sm text-muted underline-offset-4 hover:underline">
         ← 처음 화면
       </Link>
       <h1 className="text-xl font-bold">내 정보</h1>

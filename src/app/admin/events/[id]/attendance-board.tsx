@@ -155,7 +155,7 @@ export function AttendanceBoard({
             사람별 합계 <span className="text-sm font-normal text-muted">(저장한 출석 기준, 세금 공제 전)</span>
           </h3>
           <div className="overflow-x-auto rounded-xl border border-line bg-white">
-            <table className="w-full min-w-[560px] border-collapse text-sm">
+            <table className="stack-table w-full min-w-[560px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-line bg-[#f8f9fa] text-left text-[13px] text-body">
                   <th scope="col" className="px-4 py-3 font-bold">이름</th>
@@ -168,15 +168,15 @@ export function AttendanceBoard({
               <tbody>
                 {totals.map((t) => (
                   <tr key={t.memberId} className="border-b border-[#eef0f3] last:border-0">
-                    <td className="px-4 py-2.5">
+                    <td className="stack-first px-4 py-2.5">
                       <span className="font-bold">{t.name}</span> <span className="text-[12px] text-muted">{TIER_LABEL[t.tier]}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-right">
+                    <td data-label="참여한 날" className="px-3 py-2.5 text-right">
                       {t.workedDays} / {t.totalDays}일
                     </td>
-                    <td className="px-3 py-2.5 text-right">{formatWon(t.pay)}</td>
-                    <td className="px-3 py-2.5 text-right">{formatWon(t.extras)}</td>
-                    <td className="px-4 py-2.5 text-right font-bold">{formatWon(t.pay + t.extras)}</td>
+                    <td data-label="보수" className="px-3 py-2.5 text-right">{formatWon(t.pay)}</td>
+                    <td data-label="추가 지급" className="px-3 py-2.5 text-right">{formatWon(t.extras)}</td>
+                    <td data-label="합계" className="px-4 py-2.5 text-right font-bold">{formatWon(t.pay + t.extras)}</td>
                   </tr>
                 ))}
               </tbody>

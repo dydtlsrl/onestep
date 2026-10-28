@@ -24,3 +24,64 @@ body {
   color: var(--color-ink);
   word-break: keep-all;
 }
+
+/* 휴대폰(768px 미만)에서 표를 카드처럼 보여 준다. 한 줄(tr)이 카드 한 장, 칸(td)의 data-label이 왼쪽 작은 제목이 된다.
+   <table className="stack-table ...">, 체크박스 칸은 <td className="stack-check">, 카드 맨 위 제목 칸은 <td className="stack-first">.
+   컴퓨터에서는 보통 표 그대로다. 이 규칙은 레이어 밖에 있어 Tailwind 클래스(px-4, text-right 등)보다 우선한다. */
+@media (max-width: 767px) {
+  .stack-table {
+    min-width: 0;
+  }
+  .stack-table thead {
+    display: none;
+  }
+  .stack-table,
+  .stack-table tbody,
+  .stack-table tr {
+    display: block;
+  }
+  .stack-table tr {
+    position: relative;
+    padding: 0.875rem 1rem;
+  }
+  .stack-table tr:has(> .stack-check) {
+    padding-left: 3rem;
+  }
+  .stack-table td {
+    display: block;
+    padding: 0.125rem 0;
+    text-align: left;
+    white-space: normal;
+    max-width: none;
+  }
+  .stack-table td[data-label] {
+    position: relative;
+    padding-left: 5.5rem;
+  }
+  .stack-table td[data-label]::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 0;
+    top: 0.2rem;
+    width: 5rem;
+    font-size: 12px;
+    color: var(--color-muted);
+  }
+  .stack-table tr:has(> .stack-first) {
+    display: flex;
+    flex-direction: column;
+  }
+  .stack-table td.stack-first {
+    order: -1;
+    padding-bottom: 0.375rem;
+  }
+  .stack-table td.stack-check {
+    position: absolute;
+    left: 1rem;
+    top: 1rem;
+    padding: 0;
+  }
+  .stack-table td[colspan] {
+    padding: 0;
+  }
+}

@@ -79,7 +79,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 
       {events.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-line bg-white">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
+          <table className="stack-table w-full min-w-[720px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-line bg-[#f8f9fa] text-left text-[13px] text-body">
                 <th scope="col" className="px-4 py-3 font-bold">날짜</th>
@@ -97,7 +97,7 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
                 const days = [...e.event_days].sort((a, b) => a.day_date.localeCompare(b.day_date));
                 return (
                   <tr key={e.id} className="border-b border-[#eef0f3] last:border-0">
-                    <td className="whitespace-nowrap px-4 py-3">
+                    <td data-label="날짜" className="whitespace-nowrap px-4 py-3">
                       <div className="font-bold">{formatEventRange(e.start_date, e.end_date)}</div>
                       <div className="text-[13px] text-muted">
                         {days.length === 1
@@ -105,21 +105,21 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
                           : `${days.length}일 · ${days.map((d) => DAY_KIND_LABEL[d.kind]).join("·")}`}
                       </div>
                     </td>
-                    <td className="px-3 py-3">
-                      <Link href={`/admin/events/${e.id}`} className="font-bold text-ink underline-offset-4 hover:underline">
+                    <td className="stack-first px-3 py-3">
+                      <Link href={`/admin/events/${e.id}`} className="font-bold text-ink underline-offset-4 hover:underline max-md:text-base max-md:underline">
                         {e.title}
                       </Link>
                       <div className="text-[13px] text-muted">{EVENT_TYPE_LABEL[e.type]}</div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td data-label="상태" className="px-3 py-3">
                       <span className={`whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-bold ${STATUS_BADGE[e.status]}`}>
                         {EVENT_STATUS_LABEL[e.status]}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-right">
+                    <td data-label="확정 / 모집" className="whitespace-nowrap px-3 py-3 text-right">
                       <strong>{selected}</strong> / {headcount}명
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td data-label="처리 전 신청" className="px-4 py-3 text-right">
                       {waiting > 0 ? <span className="font-bold text-warn">{waiting}건</span> : <span className="text-muted">없음</span>}
                     </td>
                   </tr>

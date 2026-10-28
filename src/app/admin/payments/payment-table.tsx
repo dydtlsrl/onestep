@@ -60,8 +60,19 @@ export function PaymentTable({ rows }: { rows: PayRow[] }) {
       {[...checked].map((id) => (
         <input key={id} type="hidden" name="paymentId" value={id} />
       ))}
+      {selectable.length > 0 && (
+        <label className="flex min-h-10 items-center gap-2 text-sm md:hidden">
+          <input
+            type="checkbox"
+            checked={allChecked}
+            onChange={() => setChecked(allChecked ? new Set() : new Set(selectable.map((r) => r.id)))}
+            className="h-5 w-5"
+          />
+          모두 고르기
+        </label>
+      )}
       <div className="overflow-x-auto rounded-xl border border-line bg-white">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="stack-table w-full min-w-[720px] text-sm">
           <thead className="bg-ground text-left text-[13px] text-muted">
             <tr>
               <th scope="col" className="w-10 px-3 py-2">
@@ -87,23 +98,23 @@ export function PaymentTable({ rows }: { rows: PayRow[] }) {
               const canCheck = r.status !== "paid" && r.status !== "cancelled";
               return (
                 <tr key={r.id} className={checked.has(r.id) ? "bg-brand-soft" : undefined}>
-                  <td className="px-3 py-2">
-                    {canCheck && <input type="checkbox" aria-label={`${r.name} 고르기`} checked={checked.has(r.id)} onChange={() => toggle(r.id)} className="h-4 w-4" />}
+                  <td className="stack-check px-3 py-2">
+                    {canCheck && <input type="checkbox" aria-label={`${r.name} 고르기`} checked={checked.has(r.id)} onChange={() => toggle(r.id)} className="h-4 w-4 max-md:h-5 max-md:w-5" />}
                   </td>
-                  <td className="px-3 py-2 font-bold whitespace-nowrap">{r.name}</td>
-                  <td className="px-3 py-2">
+                  <td className="stack-first px-3 py-2 font-bold whitespace-nowrap max-md:text-base">{r.name}</td>
+                  <td data-label="일정" className="px-3 py-2">
                     <Link href={`/admin/events/${r.eventId}?tab=payments`} className="underline-offset-4 hover:underline">
                       {r.eventTitle}
                     </Link>
                   </td>
-                  <td className="px-3 py-2">
+                  <td data-label="상태" className="px-3 py-2">
                     <span className={`rounded-md px-2 py-0.5 text-xs font-bold whitespace-nowrap ${BADGE[r.status]}`}>{PAYMENT_STATUS_LABEL[r.status]}</span>
                     {r.heldReason && <span className="mt-1 block text-[12px] text-warn">{r.heldReason}</span>}
                   </td>
-                  <td className={`px-3 py-2 whitespace-nowrap ${r.account === "미등록" ? "font-bold text-warn" : ""}`}>{r.account}</td>
-                  <td className="px-3 py-2 text-right whitespace-nowrap">{formatWon(r.gross)}</td>
-                  <td className="px-3 py-2 text-right whitespace-nowrap">{formatWon(r.tax)}</td>
-                  <td className="px-3 py-2 text-right font-bold whitespace-nowrap">{formatWon(r.net)}</td>
+                  <td data-label="계좌" className={`px-3 py-2 whitespace-nowrap ${r.account === "미등록" ? "font-bold text-warn" : ""}`}>{r.account}</td>
+                  <td data-label="세전" className="px-3 py-2 text-right whitespace-nowrap">{formatWon(r.gross)}</td>
+                  <td data-label="세금" className="px-3 py-2 text-right whitespace-nowrap">{formatWon(r.tax)}</td>
+                  <td data-label="실지급" className="px-3 py-2 text-right font-bold whitespace-nowrap">{formatWon(r.net)}</td>
                 </tr>
               );
             })}
@@ -120,9 +131,9 @@ export function PaymentTable({ rows }: { rows: PayRow[] }) {
         </span>
       </div>
       <details className="text-sm">
-        <summary className="cursor-pointer text-muted underline underline-offset-4">보류하거나 보류 풀기</summary>
+        <summary className="cursor-pointer py-2.5 text-muted underline underline-offset-4">보류하거나 보류 풀기</summary>
         <div className="mt-2 flex flex-wrap items-center gap-2">
-          <input name="reason" maxLength={300} placeholder="보류 사유 (예: 계좌 확인 필요)" aria-label="보류 사유" className="h-11 w-64 rounded-lg border border-field px-3" />
+          <input name="reason" maxLength={300} placeholder="보류 사유 (예: 계좌 확인 필요)" aria-label="보류 사유" className="h-11 w-64 max-w-full rounded-lg border border-field px-3" />
           <StatusButton status="held" disabled={checked.size === 0}>
             보류
           </StatusButton>

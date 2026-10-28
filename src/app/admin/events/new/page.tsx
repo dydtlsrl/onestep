@@ -10,7 +10,7 @@ export default async function NewEventPage() {
 
   return (
     <>
-      <Link href="/admin/events" className="text-sm text-muted underline-offset-4 hover:underline">
+      <Link href="/admin/events" className="inline-flex min-h-10 items-center self-start text-sm text-muted underline-offset-4 hover:underline">
         ← 일정 목록
       </Link>
       <h1 className="text-2xl font-bold tracking-tight">새 일정</h1>
