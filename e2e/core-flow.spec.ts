@@ -130,7 +130,7 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
     const row = admin.locator("form").filter({ hasText: memberName }).first();
     await row.getByText("참석", { exact: true }).click();
     await row.getByRole("button", { name: "저장" }).click();
-    await expect(admin.getByText("참석").first()).toBeVisible();
+    await expect(row.getByRole("button", { name: "저장" })).toBeEnabled();
   });
 
   await test.step("대표: 세금 처리 방식 정하기", async () => {
@@ -155,7 +155,30 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
 
   await test.step("회원: 받은 금액 확인", async () => {
     await member.goto("/payments");
-    await expect(member.getByText(title)).toBeVisible();
-    await expect(member.getByText("받은 금액").first()).toBeVisible();
+    const row = member.locator("li").filter({ hasText: title });
+    await expect(row).toBeVisible();
+    await expect(row.getByText("받은 금액")).toBeVisible();
+  });
+
+  // 화면만 보고 지나치지 않게, DB에 실제로 남은 결과를 한 번 더 확인한다
+  await test.step("DB: 저장된 결과 확인", async () => {
+    const db = serviceClient();
+    const memberId = memberAccount.id;
+    const [{ data: profile }, { data: apps }, { data: contracts }, { data: payments }, { data: priv }] = await Promise.all([
+      db.from("profiles").select("status, tier").eq("id", memberId).single(),
+      db.from("applications").select("status, attendance").eq("event_id", eventId).eq("member_id", memberId),
+      db.from("contracts").select("status, signed_at").eq("event_id", eventId).eq("member_id", memberId),
+      db.from("payments").select("status, gross, income_tax, net").eq("event_id", eventId).eq("member_id", memberId),
+      db.from("member_private").select("rrn_masked, account_masked").eq("member_id", memberId).single(),
+    ]);
+    expect(profile).toEqual({ status: "active", tier: "core" });
+    expect(apps).toEqual([{ status: "selected", attendance: "attended" }]);
+    expect(contracts).toHaveLength(1);
+    expect(contracts![0].status).toBe("signed");
+    expect(payments).toHaveLength(1);
+    expect(payments![0].status).toBe("paid");
+    // 08:00~17:00, 시급 11,000원 → 9시간 99,000원. 기타소득 8.8%는 125,000원 이하라 세금 0원 (과세최저한)
+    expect(payments![0]).toMatchObject({ gross: 99000, income_tax: 0, net: 99000 });
+    expect(priv).toEqual({ rrn_masked: "900101-1******", account_masked: "****1234" });
   });
 });

@@ -236,6 +236,19 @@ npm run dev
 
 `NEXT_PUBLIC_`으로 시작하는 환경변수는 빌드할 때 코드에 들어간다. 값을 바꾸면 다시 빌드해야 한다.
 
+## 자동 검사 (GitHub Actions)
+`main`·작업 브랜치(`claude/...`)에 올리거나 PR을 만들 때마다 [.github/workflows/ci.yml](.github/workflows/ci.yml)이 자동으로 돈다. 결과는 GitHub 저장소의 **Actions** 탭이나 PR 아래 체크 표시에서 본다.
+
+| 작업 | 하는 일 | 걸리는 시간 |
+|---|---|---|
+| `checks` | 위 표의 lint·타입·단위 테스트·DB 테스트·빌드 | 약 1분 |
+| `e2e` | 테스트용 Supabase를 통째로 띄우고(마이그레이션 전부 적용) 앱을 켠 뒤, 대표·회원 브라우저로 핵심 흐름을 한 바퀴 돈다 ([e2e/core-flow.spec.ts](e2e/core-flow.spec.ts)): 초대 → 가입 신청 → 승인 → 일정 등록·공개 → 신청 → 확정·알림 → 계약서 → 정산 정보·서명 → 출석 → 세금 설정 → 정산 → 지급 완료 → 받은 금액, 마지막에 DB 값까지 확인 | 약 3~4분 |
+
+- 실제 서비스(Supabase 프로젝트, Netlify)는 건드리지 않는다. 테스트용 Supabase와 키는 그 실행 안에서만 만들어 쓰고 사라진다.
+- `e2e`가 실패하면 로그 끝에 그때 화면의 글자가 찍히고, 실행 페이지의 **Artifacts**에 화면 캡처·기록(`playwright-report`)이 남는다 (7일).
+- 화면 문구나 버튼 이름을 바꾸면 `e2e`가 실패할 수 있다. 그때는 [e2e/core-flow.spec.ts](e2e/core-flow.spec.ts)의 버튼 이름도 같이 고친다.
+- 내 컴퓨터에서 돌리려면 Docker와 `supabase start`가 필요하고 `.env.local`을 테스트용 값으로 바꿔야 해서(실제 서비스 값을 덮어쓰게 됨) 권하지 않는다. GitHub Actions 결과를 본다.
+
 ## 폴더 구조
 ```
 src/
