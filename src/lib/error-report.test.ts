@@ -18,6 +18,7 @@ describe("flowForPath", () => {
     expect(flowForPath("/admin/events/1")).toBe("대표: 일정·선발·계약");
     expect(flowForPath("/admin/members")).toBe("대표: 회원·가입 승인");
     expect(flowForPath("/admin")).toBe("대표: 기타");
+    expect(flowForPath("/withdraw")).toBe("탈퇴·처리방침");
     expect(flowForPath("/")).toBe("첫 화면 (내 일정)");
     expect(flowForPath("/eventsx")).toBe("기타");
     expect(flowForPath("")).toBe("알 수 없음");

@@ -33,7 +33,7 @@ erDiagram
     profiles {
         uuid id PK "로그인 계정 ID"
         text name "이름"
-        text phone UK "휴대폰 번호"
+        text phone UK "휴대폰 번호 (탈퇴하지 않은 회원끼리 중복 불가)"
         int default_rate "회원 기본 시급 (대표가 정함, 비면 일정 단가)"
         text gender "성별 (SET-08을 켤 때 추가)"
         text region "활동 가능 지역"
@@ -48,6 +48,8 @@ erDiagram
         text status_reason "거절·제한 사유 (회원에게 안 보임)"
         timestamptz privacy_agreed_at "개인정보 동의 시각"
         timestamptz approved_at "승인 시각"
+        timestamptz withdrawn_at "탈퇴 시각"
+        text withdraw_reason "탈퇴 사유"
         uuid approved_by FK "승인한 관리자"
         timestamptz created_at
         timestamptz updated_at
@@ -62,6 +64,7 @@ erDiagram
         text account_masked "계좌번호 표시용 (****1234)"
         text account_holder "예금주"
         text address "주소"
+        date retain_until "탈퇴 후 보관 기한 (보수를 받은 사람만)"
         timestamptz updated_at
     }
 
@@ -416,3 +419,14 @@ erDiagram
 | `dev_errors(days)` | 개발자 | 최근 며칠 오류 (최대 1,000건), 겪은 사람의 이름·역할 붙임 |
 | `dev_resolve_errors(ids, resolved, note)` | 개발자 | 처리함 표시·되돌리기 |
 | `dev_pilot_source()` | 개발자 | 시범 지표 재료: 설정, 공개한 일정, 초대 링크, 회원(이름·상태·가입·승인·정산 정보 등록 시각), 신청, 계약 상태·시각, 직접 고친 정산 |
+
+## 8. DB 함수 (회원 탈퇴, 처리방침)
+`20261107000000_privacy_withdrawal.sql`.
+
+| 함수 | 누가 | 하는 일 |
+|---|---|---|
+| `withdraw_blocker(member_id)` | 본인, 대표 | 탈퇴를 막는 이유: `HAS_UPCOMING_WORK`(끝나지 않은 확정 일정), `HAS_PENDING_PAYMENT`(정산·지급 전 보수). 없으면 null |
+| `withdraw_member(member_id, reason)` | 본인, 대표 (대표 계정은 불가) | 처리 전 신청 취소, 서명 전 계약 무효, 관리자 기록·알림 삭제, 지역·경력·추천인 비움. 정산 정보는 받은 보수가 없으면 삭제, 있으면 `retain_until`(마지막 지급일이 속한 해 + 5년, 12월 31일)까지 보관. 이름·휴대폰·서명한 계약·지급 기록은 남김. 본인이 탈퇴하면 대표에게 알림 |
+| `purge_expired_private()` | 로그인한 사람 | 탈퇴한 회원의 정산 정보 중 보관 기한이 지난 것 삭제 (탈퇴할 때마다 함께 돎) |
+| `submit_application(...)` | 로그인한 사람 | (바뀜) 탈퇴한 사람이 같은 계정으로 다시 신청하면 같은 ID로 승인 대기가 됨. 휴대폰 중복은 탈퇴하지 않은 다른 회원과만 비교 |
+| `public_company_info()` | 누구나 | 처리방침에 넣을 회사 이름·대표자·주소·연락처 |

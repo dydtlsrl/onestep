@@ -20,6 +20,7 @@ const FLOWS: [RegExp, string][] = [
   [/^\/payments(\/|$)/, "정산 확인"],
   [/^\/me(\/|$)/, "내 정보"],
   [/^\/notifications(\/|$)/, "알림"],
+  [/^\/(withdraw|privacy)(\/|$)/, "탈퇴·처리방침"],
   [/^\/admin\/events(\/|$)/, "대표: 일정·선발·계약"],
   [/^\/admin\/payments(\/|$)/, "대표: 정산"],
   [/^\/admin\/(applications|members|invites)(\/|$)/, "대표: 회원·가입 승인"],

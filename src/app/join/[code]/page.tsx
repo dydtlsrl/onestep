@@ -15,7 +15,8 @@ export default async function JoinPage({ params }: { params: Promise<{ code: str
   const { code } = await params;
   const { supabase, userId, profile } = await getCurrentMember();
 
-  if (userId && profile) redirect("/");
+  // 탈퇴한 사람은 같은 계정으로 다시 가입 신청을 할 수 있다
+  if (userId && profile && profile.status !== "withdrawn") redirect("/");
   if (!(await isInviteUsable(supabase, code))) {
     // 만료·꺼진 링크로 들어온 사람 (가입 흐름에서 막힌 곳)
     await reportError({ source: "server", level: "warn", code: "INVITE_INVALID", message: "쓸 수 없는 초대 링크로 접속", path: "/join" });

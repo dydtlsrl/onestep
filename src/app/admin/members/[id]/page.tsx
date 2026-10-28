@@ -10,6 +10,7 @@ import { MemberRateForm } from "./member-rate-form";
 import { PrivateCard, type PrivateMasked } from "./private-card";
 import { parsePayRules } from "@/lib/pay";
 import { DeleteNoteButton, NoteForm } from "./note-form";
+import { AdminWithdrawForm } from "./withdraw-form";
 
 interface MemberDetail {
   id: string;
@@ -26,6 +27,8 @@ interface MemberDetail {
   default_rate: number | null;
   created_at: string;
   approved_at: string | null;
+  withdrawn_at: string | null;
+  withdraw_reason: string;
   invites: { memo: string } | null;
 }
 
@@ -64,7 +67,7 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
     supabase
       .from("profiles")
       .select(
-        "id, name, phone, region, career_years, career_note, referrer_name, role, status, tier, status_reason, default_rate, created_at, approved_at, invites(memo)",
+        "id, name, phone, region, career_years, career_note, referrer_name, role, status, tier, status_reason, default_rate, created_at, approved_at, withdrawn_at, withdraw_reason, invites(memo)",
       )
       .eq("id", id)
       .maybeSingle<MemberDetail>(),
@@ -75,7 +78,11 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
       .order("created_at", { ascending: false })
       .returns<NoteRow[]>(),
     supabase.from("app_settings").select("value").eq("key", "pay_rules").maybeSingle<{ value: unknown }>(),
-    supabase.from("member_private").select("rrn_masked, bank_name, account_masked, account_holder, address").eq("member_id", id).maybeSingle<PrivateMasked>(),
+    supabase
+      .from("member_private")
+      .select("rrn_masked, bank_name, account_masked, account_holder, address, retain_until")
+      .eq("member_id", id)
+      .maybeSingle<PrivateMasked & { retain_until: string | null }>(),
     supabase.from("member_participation").select("attended_count").eq("member_id", id).maybeSingle<{ attended_count: number }>(),
   ]);
 
@@ -155,7 +162,18 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
                 </Link>{" "}
                 탭에서 처리해 주세요.
               </p>
-            ) : member.status === "rejected" || member.status === "withdrawn" ? (
+            ) : member.status === "withdrawn" ? (
+              <div className="flex flex-col gap-1 text-sm text-body">
+                <p>{member.withdrawn_at ? formatDateTime(member.withdrawn_at) : ""}에 탈퇴했어요.</p>
+                {member.withdraw_reason && <p>사유: {member.withdraw_reason}</p>}
+                <p className="text-[13px] text-muted">
+                  {priv?.retain_until
+                    ? `정산 정보는 세금 신고 자료라 ${formatDate(priv.retain_until)}까지 보관한 뒤 지워져요.`
+                    : "정산 정보는 지워졌어요."}{" "}
+                  같은 계정으로 초대 링크를 열면 다시 가입 신청을 할 수 있어요.
+                </p>
+              </div>
+            ) : member.status === "rejected" ? (
               <p className="text-sm text-body">{STATUS_LABEL[member.status]} 상태라 바꿀 수 있는 것이 없어요.</p>
             ) : (
               <MemberControls
@@ -171,6 +189,7 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
                 <MemberRateForm memberId={member.id} rate={member.default_rate} defaultHourlyRate={parsePayRules(setting?.value).defaultHourlyRate} />
               </div>
             )}
+            {member.role === "member" && member.status !== "withdrawn" && <AdminWithdrawForm memberId={member.id} />}
           </Section>
         </div>
       </div>

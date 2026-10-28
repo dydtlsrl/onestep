@@ -130,3 +130,18 @@ export async function revealPrivate(_prev: RevealState, formData: FormData): Pro
     return { error: "암호를 풀지 못했어요. 암호화 키(PII_ENCRYPTION_KEY)가 저장할 때와 같은지 확인해 주세요." };
   }
 }
+
+// 회원이 전화 등으로 탈퇴를 요청했을 때 대표가 대신 처리한다. 지울 것·남길 것은 본인 탈퇴와 같다.
+export async function withdrawMember(_prev: MemberActionState, formData: FormData): Promise<MemberActionState> {
+  const id = memberId.safeParse(formData.get("memberId"));
+  if (!id.success) return { error: "잘못된 요청이에요." };
+  if (formData.get("confirm") !== "on") return { error: "회원이 탈퇴를 요청했는지 확인하고 체크해 주세요." };
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 200);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("withdraw_member", { p_member_id: id.data, p_reason: reason });
+  if (error) return { error: await actionError(error) };
+
+  refresh(id.data);
+  return { ok: "탈퇴 처리했어요." };
+}

@@ -37,6 +37,10 @@ const MESSAGES: Record<string, string> = {
   SIGNATURE_REQUIRED: "서명란에 서명해 주세요.",
   PAYMENT_LOCKED: "지급 완료되었거나 보류 중인 정산은 고칠 수 없어요. 보류를 먼저 풀어 주세요.",
   NOT_DEVELOPER: "개발자 계정만 할 수 있어요.",
+  NOT_ALLOWED: "이 계정으로는 할 수 없어요.",
+  HAS_UPCOMING_WORK: "확정된 일정이 아직 남아 있어요. 대표님께 먼저 말씀해 주세요.",
+  HAS_PENDING_PAYMENT: "아직 받지 않은 보수가 있어요. 지급이 끝난 뒤에 탈퇴할 수 있어요.",
+  ALREADY_WITHDRAWN: "이미 탈퇴한 계정이에요.",
   PII_KEY_MISSING: "암호화 키(PII_ENCRYPTION_KEY)가 설정되지 않았어요. 대표님께 알려 주세요.",
 };
 
