@@ -387,7 +387,7 @@ erDiagram
 
 | 함수 | 누가 | 하는 일 |
 |---|---|---|
-| `update_setting(key, value, reason)` | 대표 | `company`(회사 정보), `contract`(주민번호 표시), `tax`(세목·과세최저한·교통비 포함) 저장. 값 모양 확인, 버전·이력·기록 |
+| `update_setting(key, value, reason)` | 대표 | `company`(회사 정보), `contract`(주민번호 표시), `tax`(세목·과세최저한·교통비 포함), `pilot`(시범 운영 지표: 대상 일정·초대 링크 ID, 초대 인원, 기존 처리 시간(분), 목표 감소율, 인터뷰 응답·사고 건수, 메모, 10번 파일) 저장. 값 모양 확인, 버전·이력·기록 |
 | `admin_private_secrets(member_ids, purpose)` | 대표 | 암호문 받기 (`view`, `transfer`, `contract`). 열람 기록 |
 | `my_private_secrets()` | 회원 | 자기 암호문 받기 (계약서 주민번호 전체 표시용) |
 | `save_contract_template(title, body)` | 대표 | 양식을 새 버전으로 저장 |

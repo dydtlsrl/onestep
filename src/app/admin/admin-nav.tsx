@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/admin/payments", label: "정산" },
   { href: "/admin/rates", label: "단가표" },
   { href: "/admin/contracts", label: "계약서 양식" },
+  { href: "/admin/pilot", label: "시범 운영" },
   { href: "/admin/settings", label: "설정" },
 ];
 
