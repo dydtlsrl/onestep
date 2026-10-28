@@ -4,6 +4,7 @@ import { OAuthButtons } from "@/components/oauth-buttons";
 import { Card, Notice, PageShell } from "@/components/page-shell";
 import { getCurrentMember } from "@/lib/auth";
 import { detectInAppBrowser } from "@/lib/in-app-browser";
+import { LOGIN_METHOD_LABEL } from "@/lib/login-providers";
 import { safeNextPath } from "@/lib/safe-next";
 
 // 이미 가입한 사람이 다시 로그인하는 화면
@@ -19,7 +20,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <PageShell>
       <Card>
         <h1 className="text-xl font-bold">로그인</h1>
-        <p className="text-[15px] leading-relaxed text-body">가입할 때 쓴 방법(카카오 또는 Google)으로 로그인해 주세요.</p>
+        <p className="text-[15px] leading-relaxed text-body">가입할 때 쓴 {LOGIN_METHOD_LABEL} 계정으로 로그인해 주세요.</p>
         {error && <Notice tone="warn">로그인하지 못했어요. 다시 시도해 주세요.</Notice>}
         <OAuthButtons next={next} inApp={inApp} />
       </Card>
