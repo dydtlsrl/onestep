@@ -32,6 +32,7 @@
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_...` | `.env.local`과 같음 |
 | `NEXT_PUBLIC_SITE_URL` | 배포 주소 (2단계에서 확인 후 넣음) | 초대 링크에 쓰는 주소 |
 | `PII_ENCRYPTION_KEY` | 보관해 둔 암호화 키 | **"Contains secret values"를 체크**한다. 채팅·메신저에 붙여 넣지 않는다 |
+| `NEXT_PUBLIC_KAKAO_LOGIN` | `on` (카카오 설정을 마친 뒤에만) | 없으면 카카오 버튼이 숨겨지고 Google만 보인다 |
 
 ⚠️ `service_role` 키나 Supabase secret 키는 **넣지 않는다.** 이 앱은 그 키를 쓰지 않는다.
 

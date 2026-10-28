@@ -139,6 +139,7 @@ Supabase > Authentication > **URL Configuration**
    Supabase의 카카오 로그인은 로그인할 때마다 이메일 항목을 함께 요청하므로, 이메일 동의항목이 설정되어 있지 않으면 `KOE205` 오류가 난다.
 7. Supabase > Authentication > **Sign In / Providers > Kakao**를 켜고 REST API 키와 Client Secret을 넣는다.
    **Allow users without an email**도 켠다. 이메일 제공에 동의하지 않은 사람도 로그인할 수 있게 하기 위해서다.
+8. 환경변수 `NEXT_PUBLIC_KAKAO_LOGIN=on`을 넣는다 (로컬은 `.env.local`, 배포는 호스팅 환경변수 후 다시 배포). 넣기 전에는 로그인 화면에 카카오 버튼이 보이지 않는다.
 
 ### 7. Google 로그인 설정
 1. [console.cloud.google.com](https://console.cloud.google.com)에서 프로젝트를 만들고 **OAuth 동의 화면**을 설정한다. (앱 이름: 원스텝)

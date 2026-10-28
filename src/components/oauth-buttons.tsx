@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { kakaoTalkExternalUrl, type InAppBrowser } from "@/lib/in-app-browser";
+import { KAKAO_LOGIN_ENABLED } from "@/lib/login-providers";
 
 type Provider = "kakao" | "google";
 
-// 카카오·구글 로그인 버튼.
+// 카카오·구글 로그인 버튼. 카카오는 설정을 켰을 때만 보인다 (lib/login-providers).
 // next: 로그인을 마친 뒤 돌아갈 경로 (예: /signup/<초대코드>)
 // inApp: 앱 안 브라우저인지 (서버에서 User-Agent로 판단해 넘겨준다)
 export function OAuthButtons({ next, inApp }: { next: string; inApp: InAppBrowser }) {
@@ -31,14 +32,16 @@ export function OAuthButtons({ next, inApp }: { next: string; inApp: InAppBrowse
 
   return (
     <div className="flex flex-col gap-3">
-      <button
-        type="button"
-        onClick={() => signIn("kakao")}
-        disabled={pending !== null}
-        className="h-12 rounded-lg bg-kakao text-[15px] font-bold text-black/85 disabled:opacity-60"
-      >
-        {pending === "kakao" ? "카카오로 이동 중…" : "카카오 로그인"}
-      </button>
+      {KAKAO_LOGIN_ENABLED && (
+        <button
+          type="button"
+          onClick={() => signIn("kakao")}
+          disabled={pending !== null}
+          className="h-12 rounded-lg bg-kakao text-[15px] font-bold text-black/85 disabled:opacity-60"
+        >
+          {pending === "kakao" ? "카카오로 이동 중…" : "카카오 로그인"}
+        </button>
+      )}
 
       {inApp === null && (
         <button
