@@ -149,11 +149,11 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
           <Section title="등급과 상태">
             {member.status === "pending" ? (
               <p className="text-sm text-body">
-                승인 대기 중이에요.{" "}
+                승인 대기 중이에요. 회원 화면의{" "}
                 <Link href="/admin/applications" className="font-bold text-brand underline underline-offset-4">
                   가입 승인
-                </Link>
-                에서 처리해 주세요.
+                </Link>{" "}
+                탭에서 처리해 주세요.
               </p>
             ) : member.status === "rejected" || member.status === "withdrawn" ? (
               <p className="text-sm text-body">{STATUS_LABEL[member.status]} 상태라 바꿀 수 있는 것이 없어요.</p>

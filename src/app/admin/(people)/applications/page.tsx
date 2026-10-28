@@ -1,8 +1,8 @@
 import { PROFILE_COLUMNS, requireAdmin, type Profile } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
+import { reportLoadError } from "@/lib/error-log";
 import { formatPhone } from "@/lib/phone";
 import { DecisionForms } from "./decision-forms";
-import { reportLoadError } from "@/lib/error-log";
 
 type PendingProfile = Profile & { invites: { memo: string } | null };
 
@@ -21,10 +21,7 @@ export default async function ApplicationsPage() {
   await reportLoadError("/admin/applications", error);
   return (
     <>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">가입 승인</h1>
-        <p className="text-sm text-muted">신청서를 확인하고 등급을 정해 승인해 주세요. 승인하면 회원이 바로 이용할 수 있어요.</p>
-      </div>
+      <p className="text-sm text-muted">신청서를 확인하고 등급을 정해 승인해 주세요. 승인하면 회원이 바로 이용할 수 있어요.</p>
 
       {error && <p className="text-sm font-bold text-warn">목록을 불러오지 못했어요. 새로고침해 주세요.</p>}
 

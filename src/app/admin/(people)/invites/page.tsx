@@ -47,10 +47,7 @@ export default async function InvitesPage() {
   await reportLoadError("/admin/invites", error);
   return (
     <>
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold tracking-tight">초대 링크</h1>
-        <p className="text-sm text-muted">링크를 받은 사람만 가입 신청을 할 수 있어요. 가입은 대표가 승인해야 끝나요.</p>
-      </div>
+      <p className="text-sm text-muted">링크를 받은 사람만 가입 신청을 할 수 있어요. 가입은 대표가 승인해야 끝나요.</p>
 
       <CreateInviteForm />
 

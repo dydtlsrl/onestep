@@ -4,11 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-const LINKS = [
+// 회원은 회원 목록·가입 승인·초대 링크를 탭으로 묶은 한 화면이다 (also: 그 탭들의 주소)
+const LINKS: { href: string; label: string; also?: string[] }[] = [
   { href: "/admin/events", label: "일정" },
-  { href: "/admin/applications", label: "가입 승인" },
-  { href: "/admin/members", label: "회원" },
-  { href: "/admin/invites", label: "초대 링크" },
+  { href: "/admin/members", label: "회원", also: ["/admin/applications", "/admin/invites"] },
   { href: "/admin/payments", label: "정산" },
   { href: "/admin/rates", label: "단가표" },
   { href: "/admin/contracts", label: "계약서 양식" },
@@ -31,7 +30,7 @@ export function AdminNav({ pendingCount }: { pendingCount: number }) {
   return (
     <ul ref={listRef} className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:overflow-visible md:p-0">
       {LINKS.map((link) => {
-        const active = pathname.startsWith(link.href);
+        const active = [link.href, ...(link.also ?? [])].some((href) => pathname.startsWith(href));
         return (
           <li key={link.href} className="shrink-0">
             <Link
@@ -42,7 +41,7 @@ export function AdminNav({ pendingCount }: { pendingCount: number }) {
               }`}
             >
               {link.label}
-              {link.href === "/admin/applications" && pendingCount > 0 && (
+              {link.href === "/admin/members" && pendingCount > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1.5 text-xs font-bold text-navy">
                   {pendingCount}
                 </span>
