@@ -47,7 +47,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-5 px-3 py-6 sm:px-6 print:p-0">
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <Link href={back} className="text-sm text-muted underline-offset-4 hover:underline">
+        <Link href={back} className="inline-flex min-h-10 items-center self-start text-sm text-muted underline-offset-4 hover:underline">
           ← {profile.role === "admin" ? "일정의 계약 목록" : "내 계약서"}
         </Link>
         <PrintButton />

@@ -124,7 +124,7 @@ export default async function MembersPage({
 
       {members.length > 0 && (
         <div className="overflow-x-auto rounded-xl border border-line bg-white">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
+          <table className="stack-table w-full min-w-[720px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-line bg-[#f8f9fa] text-left text-[13px] text-body">
                 <th scope="col" className="px-4 py-3 font-bold">이름</th>
@@ -142,9 +142,9 @@ export default async function MembersPage({
                 const issues = (c?.no_show_count ?? 0) + (c?.late_count ?? 0);
                 return (
                   <tr key={m.id} className="border-b border-[#eef0f3] last:border-0">
-                    <td className="px-4 py-3">
+                    <td className="stack-first px-4 py-3">
                       <div className="flex items-center gap-1.5 whitespace-nowrap">
-                        <Link href={`/admin/members/${m.id}`} className="font-bold text-ink underline-offset-4 hover:underline">
+                        <Link href={`/admin/members/${m.id}`} className="font-bold text-ink underline-offset-4 hover:underline max-md:text-base max-md:underline">
                           {m.name}
                         </Link>
                         {m.tier === "core" ? (
@@ -155,15 +155,15 @@ export default async function MembersPage({
                         {m.role === "admin" && <span className="text-[11px] font-bold text-muted">대표</span>}
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td data-label="상태" className="px-3 py-3">
                       <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${STATUS_BADGE[m.status]}`}>
                         {STATUS_LABEL[m.status]}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3">{formatPhone(m.phone)}</td>
-                    <td className="px-3 py-3 text-body">{m.region || "—"}</td>
-                    <td className="px-3 py-3 text-right">{m.career_years}년</td>
-                    <td className="whitespace-nowrap px-3 py-3">
+                    <td data-label="휴대폰" className="whitespace-nowrap px-3 py-3">{formatPhone(m.phone)}</td>
+                    <td data-label="지역" className="px-3 py-3 text-body">{m.region || "—"}</td>
+                    <td data-label="경력" className="px-3 py-3 text-right">{m.career_years}년</td>
+                    <td data-label="노쇼·지각" className="whitespace-nowrap px-3 py-3">
                       {issues > 0 ? (
                         <span className="font-bold text-warn">
                           노쇼 {c?.no_show_count ?? 0} · 지각 {c?.late_count ?? 0}
@@ -172,7 +172,7 @@ export default async function MembersPage({
                         <span className="text-muted">없음</span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-muted">{formatDate(m.created_at)}</td>
+                    <td data-label="가입 신청일" className="whitespace-nowrap px-4 py-3 text-muted">{formatDate(m.created_at)}</td>
                   </tr>
                 );
               })}

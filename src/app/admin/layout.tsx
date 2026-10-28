@@ -9,22 +9,29 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .select("id", { count: "exact", head: true })
     .eq("status", "pending");
 
+  const signOut = (className: string) => (
+    <form action="/auth/signout" method="post" className={className}>
+      <button type="submit" className="min-h-10 text-sm text-[#c9d3e6] underline underline-offset-4 hover:text-white">
+        로그아웃
+      </button>
+    </form>
+  );
+
   return (
-    <div className="flex flex-1 flex-wrap items-stretch">
-      <nav aria-label="관리자 메뉴" className="flex flex-[1_1_200px] flex-col gap-4 bg-navy px-3 py-5 text-white">
-        <div className="flex flex-col gap-0.5 px-3">
-          <span className="text-lg font-bold tracking-tight">원스텝</span>
-          <span className="text-xs text-[#c9d3e6]">관리자 · {profile.name}</span>
+    <div className="flex flex-1 flex-col md:flex-row">
+      <nav aria-label="관리자 메뉴" className="flex flex-col bg-navy text-white md:w-[200px] md:shrink-0 md:gap-4 md:px-3 md:py-5">
+        <div className="flex items-center justify-between gap-3 px-4 py-2 md:px-3 md:py-0">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-lg font-bold tracking-tight">원스텝</span>
+            <span className="text-xs text-[#c9d3e6]">관리자 · {profile.name}</span>
+          </div>
+          {signOut("md:hidden")}
         </div>
         <AdminNav pendingCount={count ?? 0} />
-        <form action="/auth/signout" method="post" className="mt-auto px-3">
-          <button type="submit" className="text-sm text-[#c9d3e6] underline underline-offset-4 hover:text-white">
-            로그아웃
-          </button>
-        </form>
+        {signOut("mt-auto hidden px-3 md:block")}
       </nav>
-      <main className="min-w-0 flex-[999_1_560px] px-4 py-6 sm:px-8">
-        <div className="flex max-w-5xl flex-col gap-5">{children}</div>
+      <main className="min-w-0 flex-1 px-4 py-6 sm:px-8">
+        <div className="flex max-w-6xl flex-col gap-5">{children}</div>
       </main>
     </div>
   );

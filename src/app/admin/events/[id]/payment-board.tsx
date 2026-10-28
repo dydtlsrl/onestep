@@ -250,7 +250,7 @@ export function PaymentBoard({
                     type="button"
                     onClick={() => setOpen(open === r.memberId ? null : r.memberId)}
                     aria-expanded={open === r.memberId}
-                    className="self-start text-sm text-brand-strong underline underline-offset-4"
+                    className="inline-flex min-h-10 items-center self-start text-sm text-brand-strong underline underline-offset-4"
                   >
                     {open === r.memberId ? "닫기" : "항목 보기·고치기"}
                   </button>

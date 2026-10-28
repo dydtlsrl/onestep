@@ -67,7 +67,7 @@ export function DeleteNoteButton({ noteId, memberId }: { noteId: string; memberI
     >
       <input type="hidden" name="noteId" value={noteId} />
       <input type="hidden" name="memberId" value={memberId} />
-      <button type="submit" className="text-[13px] text-muted underline underline-offset-4 hover:text-warn">
+      <button type="submit" className="inline-flex min-h-10 items-center text-[13px] text-muted underline underline-offset-4 hover:text-warn">
         삭제
       </button>
     </form>

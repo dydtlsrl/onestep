@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 
 const LINKS = [
   { href: "/admin/events", label: "일정" },
@@ -14,19 +15,29 @@ const LINKS = [
   { href: "/admin/settings", label: "설정" },
 ];
 
+// 컴퓨터: 왼쪽 세로 메뉴. 휴대폰: 옆으로 밀어 보는 한 줄 메뉴 (화면 위를 적게 차지하도록)
 export function AdminNav({ pendingCount }: { pendingCount: number }) {
   const pathname = usePathname();
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // 휴대폰에서 지금 메뉴가 화면 밖(오른쪽)에 있으면 보이게 옆으로 민다
+  useEffect(() => {
+    const list = listRef.current;
+    const active = list?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!list || !active || list.scrollWidth <= list.clientWidth) return;
+    list.scrollLeft = active.offsetLeft - (list.clientWidth - active.offsetWidth) / 2;
+  }, [pathname]);
 
   return (
-    <ul className="flex flex-wrap gap-1">
+    <ul ref={listRef} className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:overflow-visible md:p-0">
       {LINKS.map((link) => {
         const active = pathname.startsWith(link.href);
         return (
-          <li key={link.href} className="flex-[1_1_160px]">
+          <li key={link.href} className="shrink-0">
             <Link
               href={link.href}
               aria-current={active ? "page" : undefined}
-              className={`flex h-11 items-center justify-between rounded-lg px-3 text-sm ${
+              className={`flex h-10 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-sm md:h-11 md:justify-between md:rounded-lg md:px-3 ${
                 active ? "bg-[#2a3f6a] font-bold text-white" : "text-[#c9d3e6] hover:bg-[#22355c]"
               }`}
             >

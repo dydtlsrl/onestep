@@ -246,8 +246,19 @@ export function SelectionBoard({
       )}
       <Message state={decideState} />
 
+      {editable && selectable.length > 0 && (
+        <label className="flex min-h-10 items-center gap-2 text-sm md:hidden">
+          <input
+            type="checkbox"
+            checked={allChecked}
+            onChange={() => setChecked(allChecked ? new Set() : new Set(selectable.map((a) => a.id)))}
+            className="h-5 w-5 accent-brand"
+          />
+          보이는 신청 모두 선택
+        </label>
+      )}
       <div className="overflow-x-auto rounded-xl border border-line bg-white">
-        <table className="w-full min-w-[820px] border-collapse text-sm">
+        <table className="stack-table w-full min-w-[820px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-line bg-[#f8f9fa] text-left text-[13px] text-body">
               <th scope="col" className="w-10 py-3 pl-4">
@@ -272,20 +283,20 @@ export function SelectionBoard({
             {visible.map((a) => (
               <Fragment key={a.id}>
                 <tr className={`border-b border-[#eef0f3] ${checked.has(a.id) ? "bg-[#f3f6fe]" : ""}`}>
-                  <td className="py-3 pl-4">
+                  <td className="stack-check py-3 pl-4">
                     {editable && a.status !== "cancelled" && (
                       <input
                         type="checkbox"
                         aria-label={`${a.name} ${multiDay ? a.dayLabel : ""} 선택`}
                         checked={checked.has(a.id)}
                         onChange={() => toggle(a.id)}
-                        className="h-4 w-4 accent-brand"
+                        className="h-4 w-4 accent-brand max-md:h-5 max-md:w-5"
                       />
                     )}
                   </td>
-                  <td className="px-3 py-3">
-                    <div className="flex items-center gap-1.5 whitespace-nowrap">
-                      <Link href={`/admin/members/${a.memberId}`} className="font-bold text-ink underline-offset-4 hover:underline">
+                  <td className="stack-first px-3 py-3">
+                    <div className="flex flex-wrap items-center gap-1.5 whitespace-nowrap">
+                      <Link href={`/admin/members/${a.memberId}`} className="font-bold text-ink underline-offset-4 hover:underline max-md:text-base">
                         {a.name}
                       </Link>
                       {a.tier === "core" ? (
@@ -298,8 +309,8 @@ export function SelectionBoard({
                     </div>
                     <span className="text-[12px] text-muted">신청 {a.appliedAt}</span>
                   </td>
-                  {multiDay && <td className="whitespace-nowrap px-3 py-3 font-bold">{a.dayLabel}</td>}
-                  <td className="px-3 py-3">
+                  {multiDay && <td data-label="날짜" className="whitespace-nowrap px-3 py-3 font-bold">{a.dayLabel}</td>}
+                  <td data-label="역할 · 단가" className="px-3 py-3">
                     <div className="flex items-center gap-2">
                       <span className="flex flex-col whitespace-nowrap">
                         <span className={a.roleName ? "font-bold" : "text-muted"}>{a.roleName || "역할 미정"}</span>
@@ -310,14 +321,14 @@ export function SelectionBoard({
                           type="button"
                           aria-expanded={editing === a.id}
                           onClick={() => setEditing(editing === a.id ? null : a.id)}
-                          className="h-8 whitespace-nowrap rounded-md border border-field bg-white px-2 text-[12px] text-body hover:bg-ground"
+                          className="h-8 whitespace-nowrap rounded-md border border-field bg-white px-2 text-[12px] text-body hover:bg-ground max-md:h-10 max-md:px-3 max-md:text-[13px]"
                         >
                           고치기
                         </button>
                       )}
                     </div>
                   </td>
-                  <td className="max-w-[260px] px-3 py-3">
+                  <td data-label="이력" className="max-w-[260px] px-3 py-3">
                     <span className="flex flex-wrap gap-x-2 whitespace-nowrap">
                       <span>참여 {a.participation}회</span>
                       {a.noShow + a.late > 0 && (
@@ -332,7 +343,7 @@ export function SelectionBoard({
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2">
+                  <td data-label="처리" className="px-4 py-2 max-md:pt-2">
                     {a.status === "cancelled" && (
                       <span className={`whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-bold ${APPLICATION_BADGE[a.status]}`}>{APPLICATION_STATUS_LABEL[a.status]}</span>
                     )}
@@ -352,7 +363,7 @@ export function SelectionBoard({
                                 type="submit"
                                 aria-pressed={current}
                                 title={current ? "다시 누르면 처리 전으로 되돌려요" : undefined}
-                                className={`h-8 rounded-md border px-2.5 text-[13px] ${current ? "border-ink bg-ink font-bold text-white" : "border-field bg-white text-body"}`}
+                                className={`h-8 rounded-md border px-2.5 text-[13px] max-md:h-10 max-md:px-3.5 ${current ? "border-ink bg-ink font-bold text-white" : "border-field bg-white text-body"}`}
                               >
                                 {d.label}
                               </button>

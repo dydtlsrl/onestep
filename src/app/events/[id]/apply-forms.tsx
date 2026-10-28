@@ -105,7 +105,7 @@ export function CancelForm({ eventId }: { eventId: string }) {
   return (
     <div className="flex flex-col gap-2">
       {!open ? (
-        <button type="button" onClick={() => setOpen(true)} className="self-start text-sm text-muted underline underline-offset-4 hover:text-ink">
+        <button type="button" onClick={() => setOpen(true)} className="inline-flex min-h-10 items-center self-start text-sm text-muted underline underline-offset-4 hover:text-ink">
           신청 취소하기
         </button>
       ) : (

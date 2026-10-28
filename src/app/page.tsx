@@ -176,7 +176,7 @@ export default async function HomePage() {
             원스텝은 초대받은 분만 가입할 수 있어요. 대표님께 받은 초대 링크를 다시 눌러 가입 신청을 해 주세요.
           </p>
           <details className="text-sm text-muted">
-            <summary className="cursor-pointer">내 계정 ID 보기</summary>
+            <summary className="cursor-pointer py-2.5">내 계정 ID 보기</summary>
             <p className="mt-2 break-all rounded-md bg-ground px-3 py-2 font-mono text-xs text-body">{userId}</p>
             <p className="mt-2 leading-relaxed">대표 계정을 처음 등록할 때 필요한 값이에요. (README의 &lsquo;첫 대표 계정 만들기&rsquo;)</p>
           </details>

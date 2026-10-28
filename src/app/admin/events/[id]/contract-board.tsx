@@ -41,11 +41,11 @@ function VoidForm({ eventId, contractId }: { eventId: string; contractId: string
   const [state, action] = useActionState<SettleState, FormData>(voidContract, {});
   return (
     <details className="text-sm">
-      <summary className="cursor-pointer text-muted underline underline-offset-4">무효로 하기</summary>
+      <summary className="cursor-pointer py-2.5 text-muted underline underline-offset-4">무효로 하기</summary>
       <form action={action} className="mt-2 flex flex-wrap items-center gap-2">
         <input type="hidden" name="eventId" value={eventId} />
         <input type="hidden" name="contractId" value={contractId} />
-        <input name="reason" required maxLength={300} placeholder="이유 (예: 금액 수정)" aria-label="무효 이유" className="h-10 w-48 rounded-lg border border-field px-3 text-sm" />
+        <input name="reason" required maxLength={300} placeholder="이유 (예: 금액 수정)" aria-label="무효 이유" className="h-10 w-48 max-w-full rounded-lg border border-field px-3 text-sm" />
         <SubmitButton variant="secondary" pendingText="처리 중…" className="h-10">
           무효
         </SubmitButton>
@@ -132,7 +132,7 @@ export function ContractBoard({ eventId, rows, canSend }: { eventId: string; row
                 {!r.hasPrivate && <span className="text-[13px] text-warn">정산 정보 미등록</span>}
                 <span className="ml-auto flex flex-wrap items-center gap-3">
                   {r.contract && (
-                    <Link href={`/contracts/${r.contract.id}`} className="text-sm font-bold text-brand-strong underline underline-offset-4">
+                    <Link href={`/contracts/${r.contract.id}`} className="inline-flex min-h-10 items-center text-sm font-bold text-brand-strong underline underline-offset-4">
                       보기
                     </Link>
                   )}

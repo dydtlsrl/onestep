@@ -86,7 +86,7 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
 
   return (
     <>
-      <Link href="/admin/members" className="text-sm text-muted underline-offset-4 hover:underline">
+      <Link href="/admin/members" className="inline-flex min-h-10 items-center self-start text-sm text-muted underline-offset-4 hover:underline">
         ← 회원 목록
       </Link>
 

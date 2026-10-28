@@ -44,7 +44,7 @@ export default async function MyPaymentsPage() {
 
   return (
     <PageShell>
-      <Link href="/" className="-mt-3 text-sm text-muted underline-offset-4 hover:underline">
+      <Link href="/" className="-mt-3 inline-flex min-h-10 items-center self-start text-sm text-muted underline-offset-4 hover:underline">
         ← 처음 화면
       </Link>
       <h1 className="text-xl font-bold">정산 내역</h1>
@@ -81,7 +81,7 @@ export default async function MyPaymentsPage() {
                     </div>
                     {p.status === "held" && p.held_reason && <p className="rounded-md bg-warn-soft px-3 py-2 text-sm text-warn">보류 사유: {p.held_reason}</p>}
                     <details className="text-sm">
-                      <summary className="cursor-pointer text-muted">자세히 보기</summary>
+                      <summary className="cursor-pointer py-2.5 text-muted">자세히 보기</summary>
                       <ul className="mt-2 flex flex-col gap-1">
                         {[...p.payment_items].sort((a, b) => a.sort_order - b.sort_order).map((i) => (
                           <li key={i.id} className="flex justify-between gap-3">
