@@ -176,6 +176,7 @@ npm run dev
    from auth.users where email = '<대표 Gmail>'
    returning id, name;
    ```
+   **꺾쇠(`< >`)까지 지우고** 실제 값을 넣는다. 예: `'홍길동'`, `'01012345678'`, `'hong@gmail.com'`
    이메일을 모르면 "아직 가입 신청 전이에요" 화면의 **내 계정 ID 보기**로 ID를 받아 `where id = '<계정 ID>'`로 바꿔 실행해도 된다.
 3. 대표가 새로고침하면 대표 화면(`/admin`)이 열린다.
 
@@ -185,9 +186,11 @@ npm run dev
 2. Supabase SQL Editor에서 아래를 실행한다. 결과에 한 줄이 나오면 된다.
    ```sql
    insert into public.developers (user_id, note)
-   select id, '<개발자 이름>' from auth.users where email = '<개발자 Gmail>'
+   select id, '<개발자 이름>' from auth.users where lower(email) = '<개발자 Gmail>'
+   on conflict (user_id) do nothing
    returning user_id;
    ```
+   **꺾쇠(`< >`)까지 지우고** 실제 값을 넣는다. 예: `where lower(email) = 'hong@gmail.com'` (꺾쇠가 남아 있으면 "No rows returned"가 나오고 등록되지 않는다)
 3. 새로고침하면 개발자 화면이 열린다. 빼려면 `delete from public.developers where user_id = '<ID>';`
 
 어떤 오류가 기록되나
