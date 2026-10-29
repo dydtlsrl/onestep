@@ -124,6 +124,7 @@ Supabase 대시보드 > **SQL Editor**에서 `supabase/migrations` 폴더의 파
 | 12 | `20261107000000_privacy_withdrawal.sql` | 회원 탈퇴(대표 대신 처리 포함), 정산 정보 보관 기한·자동 삭제, 탈퇴한 사람 다시 가입, 처리방침용 회사 정보. 데이터를 지우지 않음 |
 | 13 | `20261108000000_roster.sql` | 기존 인력 명단, 초대 링크의 "명단 번호만 가입"·개인 링크. 데이터를 지우지 않음 |
 | 14 | `20261109000000_review_fixes_2.sql` | 리뷰 반영: 대표가 "받을 보수 없음" 확인하고 탈퇴 처리, 명단 이름 필수(빈 이름은 "기본 명단"), 다시 가입 시 예전 시급·가입 시각 초기화, 오류 기록 한도를 로그인 전·후로 나눔 |
+| 15 | `20261110000000_admin_preregistration.sql` | 대표 미리 등록: Gmail·이름·번호를 넣어 두면 그 Gmail로 처음 로그인할 때 바로 대표가 됨. 데이터를 지우지 않음 |
 
 시험용 샘플 일정이 필요하면 `supabase/samples/sample_events.sql`을 실행한다 (제목이 [샘플]로 시작, 맨 아래 한 줄로 지움).
 
@@ -165,20 +166,21 @@ npm run dev
 ```
 브라우저에서 http://localhost:3000 을 연다.
 
-### 9. 첫 대표 계정 만들기
-대표 계정은 초대 링크 없이 한 번만 직접 만든다.
-1. 대표가 사이트 로그인 화면에서 본인 Google 계정으로 로그인한다. ("아직 가입 신청 전이에요" 화면이 나오면 된다)
-   Google 로그인이 "테스트 중"이면 그 Gmail을 Google Cloud > Google 인증 플랫폼 > 대상 > **테스트 사용자**에 먼저 넣는다.
-2. Supabase SQL Editor에서 아래를 실행한다. 꺾쇠 안의 값을 바꾼다. 결과에 한 줄(id, name)이 나오면 된다. 아무것도 안 나오면 그 이메일로 아직 로그인한 적이 없는 것이다.
+### 9. 대표 계정 만들기 (미리 등록)
+대표가 로그인하기 **전에** 개발자가 미리 등록해 둔다. 대표는 그 Gmail로 처음 로그인하는 순간 바로 대표 화면을 본다. 개발자가 첫 로그인을 기다릴 필요가 없다.
+1. Supabase SQL Editor에서 아래를 실행한다. 결과에 "등록했어요…"가 나오면 된다.
    ```sql
-   insert into public.profiles (id, name, phone, role, status, tier, privacy_agreed_at, approved_at)
-   select id, '<대표 이름>', '<휴대폰 숫자만, 예: 01012345678>', 'admin', 'active', 'core', now(), now()
-   from auth.users where email = '<대표 Gmail>'
-   returning id, name;
+   select public.preregister_admin('대표gmail@gmail.com', '대표 이름', '01012345678');
    ```
-   **꺾쇠(`< >`)까지 지우고** 실제 값을 넣는다. 예: `'홍길동'`, `'01012345678'`, `'hong@gmail.com'`
-   이메일을 모르면 "아직 가입 신청 전이에요" 화면의 **내 계정 ID 보기**로 ID를 받아 `where id = '<계정 ID>'`로 바꿔 실행해도 된다.
-3. 대표가 새로고침하면 대표 화면(`/admin`)이 열린다.
+   세 값을 실제 값으로 바꾼다 (따옴표는 남긴다). 휴대폰은 `010-1234-5678`처럼 넣어도 숫자만 저장한다.
+   - 이미 로그인해 본 Gmail이면 "지금 대표로 만들었어요"가 나오고, 대표가 새로고침하면 대표 화면이 열린다.
+   - `ALREADY_HAS_PROFILE`: 이미 회원 정보가 있는 계정이다 (예: 초대 링크로 회원 가입함). 대표로 바꾸려면 `update public.profiles set role = 'admin', status = 'active', tier = 'core' where id = (select id from auth.users where lower(email) = '대표gmail@gmail.com');`
+   - `PHONE_TAKEN`: 그 번호를 쓰는 회원이 이미 있다.
+2. 대표에게 앱 주소를 보내고 Google로 로그인하게 한다. Google 로그인이 "테스트 중"이면 그 Gmail을 Google Cloud > Google 인증 플랫폼 > 대상(https://console.cloud.google.com/auth/audience) > **테스트 사용자**에 먼저 넣는다.
+3. 대표가 처음 로그인했는지는 아래로 본다. `claimed_at`(첫 로그인 때)이 비어 있으면 아직 로그인 전이다.
+   ```sql
+   select email, name, created_at, claimed_at from public.admin_preregistrations;
+   ```
 
 ### 10. 개발자 화면 열기 (`/dev`)
 오류 기록과 시범 운영 지표는 개발자만 본다. 개발자는 회원으로 가입하지 않아도 된다.

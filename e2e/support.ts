@@ -24,8 +24,12 @@ export interface Account {
   password: string;
 }
 
-export async function createAccount(label: string): Promise<Account> {
-  const email = `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@e2e.test`;
+export function testEmail(label: string): string {
+  return `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@e2e.test`;
+}
+
+// 로그인 계정이 처음 생기는 순간 (실제 서비스의 첫 Google 로그인과 같다)
+export async function createAccount(label: string, email = testEmail(label)): Promise<Account> {
   const password = `pw-${Math.random().toString(36).slice(2)}-A1`;
   const { data, error } = await serviceClient().auth.admin.createUser({ email, password, email_confirm: true });
   if (error || !data.user) throw new Error(`테스트 계정을 만들지 못했어요: ${error?.message}`);
