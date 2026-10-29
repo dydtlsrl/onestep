@@ -46,7 +46,7 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: 2.122.0
-      - name: Supabase 띄우기 (migrations 1~14번 적용)
+      - name: Supabase 띄우기 (migrations 모두 적용)
         run: supabase start -x studio,realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta,mailpit
       - name: 테스트용 환경변수
         run: |
