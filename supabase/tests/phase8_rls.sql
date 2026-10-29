@@ -1,13 +1,13 @@
--- 15번 테스트: 대표 미리 등록 (처음 로그인하면 바로 대표)
+-- 15·16번 테스트: 대표 미리 등록 (Google로 처음 로그인하면 바로 대표)
 -- 실행: npm run db:test
 
 \set ON_ERROR_STOP on
 set client_min_messages = notice;
 
 -- 이미 로그인해 본 계정 둘: 회원 정보 없음 / 회원으로 가입함
-insert into auth.users (id, email) values
-  ('00000000-0000-0000-0000-0000000000aa', 'already@gmail.com'),
-  ('00000000-0000-0000-0000-0000000000ab', 'member@gmail.com');
+insert into auth.users (id, email, email_confirmed_at, raw_app_meta_data) values
+  ('00000000-0000-0000-0000-0000000000aa', 'already@gmail.com', now(), '{"provider": "google", "providers": ["google"]}'),
+  ('00000000-0000-0000-0000-0000000000ab', 'member@gmail.com', now(), '{"provider": "google", "providers": ["google"]}');
 insert into public.profiles (id, name, phone, role, status, tier, privacy_agreed_at) values
   ('00000000-0000-0000-0000-0000000000ab', '회원가', '01099000002', 'member', 'active', 'general', now());
 
@@ -37,8 +37,12 @@ select tests.expect_count($$select 1 from public.admin_preregistrations where em
 select public.preregister_admin('ceo@gmail.com', '대표', '01099000011');
 select tests.expect_count($$select 1 from public.admin_preregistrations where email = 'ceo@gmail.com' and name = '대표' and phone = '01099000011'$$, 1, '다시 등록: 덮어씀');
 
--- Google 로그인으로 계정이 처음 생기는 순간
+-- Google 로그인: 계정을 먼저 만들고, 이메일 확인과 로그인 수단(google)은 뒤에 적는다
 insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000ac', 'Ceo@gmail.com');
+select tests.expect_count($$select 1 from public.profiles where id = '00000000-0000-0000-0000-0000000000ac'$$, 0, '계정만 생김: 아직 대표 아님');
+update auth.users set email_confirmed_at = now() where id = '00000000-0000-0000-0000-0000000000ac';
+select tests.expect_count($$select 1 from public.profiles where id = '00000000-0000-0000-0000-0000000000ac'$$, 0, '이메일 확인만: 아직 대표 아님');
+update auth.users set raw_app_meta_data = '{"provider": "google", "providers": ["google"]}' where id = '00000000-0000-0000-0000-0000000000ac';
 select tests.expect_count($$select 1 from public.profiles where id = '00000000-0000-0000-0000-0000000000ac' and name = '대표' and phone = '01099000011' and role = 'admin' and status = 'active' and tier = 'core' and approved_at is not null$$, 1, '첫 로그인: 대표 계정');
 select tests.expect_count($$select 1 from public.admin_preregistrations where email = 'ceo@gmail.com' and claimed_by = '00000000-0000-0000-0000-0000000000ac' and claimed_at is not null$$, 1, '첫 로그인: 언제 들어왔는지 남음');
 select tests.expect_count($$select 1 from public.audit_logs where action = 'admin.preregistered' and actor_id = '00000000-0000-0000-0000-0000000000ac'$$, 1, '첫 로그인: 기록');
@@ -48,8 +52,21 @@ set role authenticated;
 select tests.expect_true(public.is_admin(), '첫 로그인: 대표 권한');
 reset role;
 
+-- 다시 로그인해서 같은 칸이 또 바뀌어도 한 번만
+update auth.users set raw_app_meta_data = raw_app_meta_data where id = '00000000-0000-0000-0000-0000000000ac';
+select tests.expect_count($$select 1 from public.audit_logs where action = 'admin.preregistered'$$, 1, '다시 로그인: 그대로');
+
+-- 대표 Gmail 주소로 이메일·비밀번호 가입(이메일 확인까지 됨)을 해도 대표가 되지 않는다
+select public.preregister_admin('target@gmail.com', '노린대표', '01099000007');
+insert into auth.users (id, email, email_confirmed_at, raw_app_meta_data) values
+  ('00000000-0000-0000-0000-0000000000a9', 'target@gmail.com', now(), '{"provider": "email", "providers": ["email"]}');
+select tests.expect_count($$select 1 from public.profiles where id = '00000000-0000-0000-0000-0000000000a9'$$, 0, '이메일 가입: 대표 안 됨');
+select tests.expect_count($$select 1 from public.admin_preregistrations where email = 'target@gmail.com' and claimed_at is null$$, 1, '이메일 가입: 미리 등록은 그대로');
+select tests.expect_true(public.preregister_admin('target@gmail.com', '노린대표', '01099000007') like '등록했어요%', '이메일 가입 계정: 다시 등록해도 바로 대표 안 됨');
+select tests.expect_count($$select 1 from public.profiles where id = '00000000-0000-0000-0000-0000000000a9'$$, 0, '이메일 가입 계정: 여전히 대표 아님');
+
 -- 미리 등록하지 않은 Gmail은 그대로 (가입 신청 전)
-insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000ad', 'someone@gmail.com');
+insert into auth.users (id, email, email_confirmed_at, raw_app_meta_data) values ('00000000-0000-0000-0000-0000000000ad', 'someone@gmail.com', now(), '{"provider": "google", "providers": ["google"]}');
 insert into auth.users (id) values ('00000000-0000-0000-0000-0000000000ae');
 select tests.expect_count($$select 1 from public.profiles where id in ('00000000-0000-0000-0000-0000000000ad', '00000000-0000-0000-0000-0000000000ae')$$, 0, '등록 안 한 Gmail·이메일 없는 계정: 회원 정보 없음');
 
@@ -74,7 +91,7 @@ select public.preregister_admin('late@gmail.com', '늦은대표', '01099000006')
 insert into auth.users (id) values ('00000000-0000-0000-0000-0000000000af');
 insert into public.profiles (id, name, phone, role, status, tier, privacy_agreed_at) values
   ('00000000-0000-0000-0000-0000000000af', '먼저가입', '01099000006', 'member', 'pending', 'general', now());
-insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000b0', 'late@gmail.com');
+insert into auth.users (id, email, email_confirmed_at, raw_app_meta_data) values ('00000000-0000-0000-0000-0000000000b0', 'late@gmail.com', now(), '{"provider": "google", "providers": ["google"]}');
 select tests.expect_count($$select 1 from auth.users where id = '00000000-0000-0000-0000-0000000000b0'$$, 1, '등록 실패해도 로그인 계정은 생김');
 select tests.expect_count($$select 1 from public.profiles where id = '00000000-0000-0000-0000-0000000000b0'$$, 0, '등록 실패: 회원 정보 없음');
 select tests.expect_count($$select 1 from public.admin_preregistrations where email = 'late@gmail.com' and claimed_at is null$$, 1, '등록 실패: 미리 등록은 그대로');
