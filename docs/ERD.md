@@ -451,3 +451,13 @@ erDiagram
 | `roster.list_name` | 비울 수 없음 (빈 이름은 초대 링크에서 "모든 명단"이라는 뜻이라 섞이지 않게). 기존 빈 이름은 "기본 명단" |
 | `submit_application(...)` | 다시 가입하면 `default_rate`·`created_at`을 초기화하고 정산 정보의 `retain_until`을 없앰 |
 | `log_app_error(...)` | 한도를 나눔: 로그인 전 1분 30건·하루 1,000건 / 로그인한 사람 한 사람 1분 30건·모두 하루 5,000건 |
+
+## 11. 대표 미리 등록 (15번)
+`20261110000000_admin_preregistration.sql`. `admin_preregistrations`(email, name, phone, created_at, claimed_by, claimed_at)는 앱에서 읽거나 쓰지 않는다 (RLS 켜고 정책 없음). SQL Editor와 아래 함수만 쓴다.
+
+| 함수·트리거 | 누가 | 하는 일 |
+|---|---|---|
+| `preregister_admin(email, name, phone)` | SQL Editor (개발자) | 대표 Gmail·이름·번호를 미리 넣는다. 이미 로그인해 본 Gmail이면 바로 대표 계정을 만든다. 회원 정보가 있으면 `ALREADY_HAS_PROFILE`, 번호가 겹치면 `PHONE_TAKEN` |
+| 트리거 `claim_admin_on_signup` (`auth.users` 추가 후) | 처음 로그인 | 미리 등록한 Gmail이면 대표(admin·active·core) 회원 정보를 만들고 `claimed_at`·기록(`admin.preregistered`)을 남긴다. 실패해도 로그인은 막지 않고 오류 기록(`ADMIN_PREREG_FAILED`)에 남긴다 |
+
+16번(`20261111000000_admin_prereg_google_only.sql`): 대표가 되는 조건에 **Google 로그인(`raw_app_meta_data.providers`에 google)과 이메일 확인(`email_confirmed_at`)**을 더했다. Google 로그인은 계정을 먼저 만들고 두 칸을 뒤에 적으므로, 트리거는 `auth.users` 추가와 그 두 칸이 바뀔 때 모두 확인한다. `preregister_admin`도 이미 있는 계정이 이 조건을 갖췄을 때만 바로 대표로 만든다.

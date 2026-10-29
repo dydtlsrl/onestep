@@ -2,7 +2,7 @@
 // → 출석 → 세금 설정 → 정산 만들기 → 지급 완료 → 회원이 받은 금액 확인.
 // 대표와 회원이 각자 브라우저 창을 열고 실제 화면의 버튼을 누른다.
 import { expect, test, type Page } from "@playwright/test";
-import { createAccount, dumpPage, openAs, serviceClient } from "./support";
+import { createAccount, dumpPage, openAs, serviceClient, testEmail } from "./support";
 
 // 한국 시간 기준 n일 뒤 (2026-11-05)
 function kstDate(daysFromToday: number): string {
@@ -24,12 +24,19 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
   const memberPhone = `0109${suffix}`;
   const title = `E2E 필기시험 ${suffix}`;
 
-  // 대표 계정: 처음 대표 계정은 SQL로 만드는 것과 같게 회원 정보를 직접 넣는다 (README 9단계)
-  const adminAccount = await createAccount("admin");
-  const { error: adminError } = await serviceClient()
-    .from("profiles")
-    .insert({ id: adminAccount.id, name: "테스트대표", phone: `0108${suffix}`, role: "admin", status: "active", tier: "core", privacy_agreed_at: new Date().toISOString(), approved_at: new Date().toISOString() });
+  // 대표 계정: 개발자가 Gmail·이름·번호를 미리 등록해 두면, 그 Gmail로 Google 로그인하는 순간 대표가 된다 (README 9단계)
+  const adminEmail = testEmail("admin");
+  const { error: adminError } = await serviceClient().rpc("preregister_admin", { p_email: adminEmail, p_name: "테스트대표", p_phone: `0108${suffix}` });
   expect(adminError).toBeNull();
+  const adminAccount = await createAccount("admin", adminEmail);
+  // 이메일·비밀번호 계정만으로는 대표가 되지 않는다 (16번)
+  const { data: beforeGoogle } = await serviceClient().from("profiles").select("id").eq("id", adminAccount.id);
+  expect(beforeGoogle).toEqual([]);
+  // Google 로그인처럼 로그인 수단에 google을 적는다
+  const { error: googleError } = await serviceClient().auth.admin.updateUserById(adminAccount.id, { app_metadata: { provider: "google", providers: ["google"] } });
+  expect(googleError).toBeNull();
+  const { data: adminProfile } = await serviceClient().from("profiles").select("role, status").eq("id", adminAccount.id).single();
+  expect(adminProfile).toEqual({ role: "admin", status: "active" });
   const memberAccount = await createAccount("member");
 
   const admin = (pages.admin = await openAs(browser, adminAccount));
