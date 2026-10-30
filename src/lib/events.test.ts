@@ -11,6 +11,7 @@ import {
   isoToKstLocal,
   kstLocalToIso,
   scheduledMinutes,
+  paidMinutes,
   suggestPayDate,
   todayKst,
   visibleApplicationStatus,
@@ -31,16 +32,24 @@ describe("scheduledMinutes", () => {
 });
 
 describe("suggestPayDate", () => {
-  it("행사 7일 뒤 이후 가장 가까운 15일 또는 말일", () => {
+  it("마지막 날 다음 날부터 가장 가까운 15일 또는 말일", () => {
     expect(suggestPayDate("2026-11-08")).toBe("2026-11-15");
+    expect(suggestPayDate("2026-11-14")).toBe("2026-11-15");
+    expect(suggestPayDate("2026-11-15")).toBe("2026-11-30");
     expect(suggestPayDate("2026-10-31")).toBe("2026-11-15");
     expect(suggestPayDate("2026-10-24")).toBe("2026-10-31");
-    expect(suggestPayDate("2026-10-03")).toBe("2026-10-15");
   });
 
-  it("말일을 넘기면 다음 달 15일, 2월 말일도 맞춘다", () => {
-    expect(suggestPayDate("2026-12-28")).toBe("2027-01-15");
-    expect(suggestPayDate("2027-02-10")).toBe("2027-02-28");
+  it("말일이 지나면 다음 달 15일, 2월 말일도 맞춘다", () => {
+    expect(suggestPayDate("2026-12-31")).toBe("2027-01-15");
+    expect(suggestPayDate("2027-02-20")).toBe("2027-02-28");
+  });
+});
+
+describe("paidMinutes", () => {
+  it("휴게시간을 뺀다", () => {
+    expect(paidMinutes({ start_time: "08:00:00", end_time: "17:00:00", break_minutes: 60 })).toBe(480);
+    expect(paidMinutes({ start_time: "08:00:00", end_time: "17:00:00", break_minutes: 0 })).toBe(540);
   });
 });
 

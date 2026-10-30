@@ -44,10 +44,11 @@ export interface DayRow {
   rate: number;
   min_paid_hours: number | null;
   overtime_rate: number | null;
+  break_minutes: number; // 휴게시간 (보수 계산에서 뺀다)
 }
 
 export const DAY_COLUMNS =
-  "id, event_id, day_date, kind, gather_time, start_time, end_time, sort_order, headcount, pay_type, rate, min_paid_hours, overtime_rate";
+  "id, event_id, day_date, kind, gather_time, start_time, end_time, sort_order, headcount, pay_type, rate, min_paid_hours, overtime_rate, break_minutes";
 
 // day_selected_counts 함수가 돌려주는 날짜별 확정 인원
 export interface SelectedCount {
@@ -146,8 +147,13 @@ export function scheduledMinutes(start: string, end: string): number {
   return Math.max(0, minutesOf(end) - minutesOf(start));
 }
 
-// 지급 예정일 추천: 행사일로부터 유예 기간(기본 7일)이 지난 뒤 가장 가까운 15일 또는 말일 (PRD SET-03 임시값)
-export function suggestPayDate(eventDate: string, graceDays = 7): string {
+// 보수를 계산할 근무 시간: 시작~끝에서 휴게시간을 뺀다
+export function paidMinutes(day: Pick<DayRow, "start_time" | "end_time" | "break_minutes">): number {
+  return Math.max(0, scheduledMinutes(day.start_time, day.end_time) - (day.break_minutes ?? 0));
+}
+
+// 지급 예정일 추천: 마지막 날 다음 날부터 가장 가까운 15일 또는 말일 (결정 #4·#5: 고객사 결제일에 맞춰 그날 지급)
+export function suggestPayDate(eventDate: string, graceDays = 1): string {
   const earliest = parseDate(eventDate);
   earliest.setUTCDate(earliest.getUTCDate() + graceDays);
   const y = earliest.getUTCFullYear();

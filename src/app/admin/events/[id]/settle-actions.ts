@@ -6,6 +6,7 @@ import { placeholderValues, renderTemplate } from "@/lib/contract";
 import { actionError } from "@/lib/error-log";
 import { sumItems, type PaymentItemKind } from "@/lib/settlement";
 import { contractTerms, loadSettlement, type MemberSettlement, type Settlement } from "@/lib/settlement-load";
+import { todayKst } from "@/lib/events";
 import { createClient } from "@/lib/supabase/server";
 import { calculateTax } from "@/lib/tax";
 
@@ -36,11 +37,16 @@ export async function requestContracts(_prev: SettleState, formData: FormData): 
     supabase.from("contracts").select("member_id").eq("event_id", eventId.data).neq("status", "voided").returns<{ member_id: string }[]>(),
   ]);
   if (!s) return { error: await actionError({ message: "EVENT_NOT_FOUND" }) };
-  if (!template) return { error: "계약서 양식이 없어요. 마이그레이션 9를 적용했는지 확인해 주세요." };
+  if (!template) return { error: "계약서 양식이 없어요. 계약서 양식 메뉴에서 먼저 만들어 주세요." };
+  // 계약서는 일정이 끝난 뒤, 출석 기록으로 만든다 (결정 #9·#34)
+  if (todayKst(Date.now()) < s.event.end_date) return { error: "계약서는 일정이 끝난 뒤 보낼 수 있어요. 마지막 날부터 보낼 수 있어요." };
 
   const sent = new Set((active ?? []).map((c) => c.member_id));
-  const targets = s.members.filter((m) => !sent.has(m.memberId) && (only.length === 0 || only.includes(m.memberId)));
-  if (targets.length === 0) return { error: "계약서를 보낼 확정자가 없어요. 이미 모두 보냈어요." };
+  const candidates = s.members.filter((m) => !sent.has(m.memberId) && (only.length === 0 || only.includes(m.memberId)));
+  const unchecked = candidates.filter((m) => m.actual.unknownDays > 0);
+  if (unchecked.length > 0) return { error: `출석을 확인하지 않은 사람이 있어요: ${unchecked.map((m) => m.name).join(", ")}. 출석 확인 탭에서 먼저 끝내 주세요.` };
+  const targets = candidates.filter((m) => m.actual.workedDays > 0);
+  if (targets.length === 0) return { error: "계약서를 보낼 사람이 없어요. 이미 모두 보냈거나, 일한 날이 없어요." };
 
   let done = 0;
   for (const m of targets) {
@@ -127,6 +133,7 @@ export async function generatePayments(_prev: SettleState, formData: FormData): 
   const current = new Map((existing ?? []).map((p) => [p.member_id, p]));
 
   let done = 0;
+  let cancelled = 0;
   let skipped = 0;
   for (const m of s.members) {
     if (only && m.memberId !== only) continue;
@@ -136,10 +143,22 @@ export async function generatePayments(_prev: SettleState, formData: FormData): 
       continue;
     }
     if (m.actual.items.length === 0) {
-      skipped += 1;
+      // 노쇼·미확인으로 받을 보수가 없어졌다. 전에 만든 정산이 남아 이체되지 않게 취소한다.
+      if (p && (p.status === "draft" || p.status === "scheduled")) {
+        const { error } = await supabase.rpc("cancel_payment", { p_event_id: s.event.id, p_member_id: m.memberId, p_reason: "출석 기록상 일한 날 없음" });
+        if (error) {
+          refresh(s.event.id);
+          return { error: `${m.name}님 정산을 취소하다 멈췄어요: ${await actionError(error)}` };
+        }
+        cancelled += 1;
+      } else {
+        skipped += 1;
+      }
       continue;
     }
-    const { error } = await savePayment(supabase, s, m, m.actual.items, { payDate: p?.pay_date ?? s.payDate, edited: false, memo: "" });
+    // 일정에 지급 예정일을 정했으면 그 날짜를 따른다. 정하지 않았으면 전에 저장한 날짜(직접 고쳤을 수 있음)를 둔다.
+    const payDate = s.event.pay_date ?? p?.pay_date ?? s.payDate;
+    const { error } = await savePayment(supabase, s, m, m.actual.items, { payDate, edited: false, memo: "" });
     if (error) {
       refresh(s.event.id);
       return { error: `${m.name}님 정산에서 멈췄어요 (${done}명 완료): ${await actionError(error)}` };
@@ -147,8 +166,10 @@ export async function generatePayments(_prev: SettleState, formData: FormData): 
     done += 1;
   }
   refresh(s.event.id);
-  if (done === 0) return { error: skipped > 0 ? "새로 계산할 사람이 없어요. (지급 완료·보류·직접 고친 정산은 그대로 둬요)" : "확정된 사람이 없어요." };
-  return { ok: `${done}명의 정산을 계산했어요.${skipped > 0 ? ` ${skipped}명은 그대로 뒀어요.` : ""}` };
+  const cancelText = cancelled > 0 ? ` 일한 날이 없는 ${cancelled}명의 정산은 취소했어요.` : "";
+  if (done === 0 && cancelled === 0)
+    return { error: skipped > 0 ? "새로 계산할 사람이 없어요. (지급 완료·보류·직접 고친 정산과 일한 날이 없는 사람은 그대로 둬요)" : "확정된 사람이 없어요." };
+  return { ok: `${done}명의 정산을 계산했어요.${cancelText}${skipped > 0 ? ` ${skipped}명은 그대로 뒀어요.` : ""}` };
 }
 
 const itemSchema = z.object({
