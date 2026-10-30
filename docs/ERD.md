@@ -461,3 +461,17 @@ erDiagram
 | 트리거 `claim_admin_on_signup` (`auth.users` 추가 후) | 처음 로그인 | 미리 등록한 Gmail이면 대표(admin·active·core) 회원 정보를 만들고 `claimed_at`·기록(`admin.preregistered`)을 남긴다. 실패해도 로그인은 막지 않고 오류 기록(`ADMIN_PREREG_FAILED`)에 남긴다 |
 
 16번(`20261111000000_admin_prereg_google_only.sql`): 대표가 되는 조건에 **Google 로그인(`raw_app_meta_data.providers`에 google)과 이메일 확인(`email_confirmed_at`)**을 더했다. Google 로그인은 계정을 먼저 만들고 두 칸을 뒤에 적으므로, 트리거는 `auth.users` 추가와 그 두 칸이 바뀔 때 모두 확인한다. `preregister_admin`도 이미 있는 계정이 이 조건을 갖췄을 때만 바로 대표로 만든다.
+
+## 12. 정산·계약서를 실제 운영에 맞춤 (17번)
+`20261112000000_settle_contract_fixes.sql`. 계약서는 일정이 끝난 뒤 출석 기록으로 보낸다 (결정 #9·#34·#35).
+
+| 바뀐 것 | 내용 |
+|---|---|
+| `event_days.break_minutes` | 날짜별 휴게시간(분, 0~600, 근무 시간보다 짧게). 시급은 시작~끝에서 휴게시간을 뺀 시간으로 계산 (`paidMinutes`) |
+| `cancel_payment(event, member, reason)` | 대표만. 확정 전·지급 예정 정산을 취소한다. 노쇼·미확인으로 일한 날이 없어진 사람을 다시 계산할 때 쓴다. 다시 계산하면 되살아난다 |
+| `set_payment_status` | 보류 풀기: 세금 방식을 정하기 전에 보류한 것은 "확정 전"(draft)으로 돌아간다 |
+| `withdraw_member(..., force)` | 확인 처리로 넘겨도, 아직 주지 않은 정산(draft·scheduled·held)이 있으면 `HAS_UNPAID_PAYMENT` |
+| `contracts.signer_account`, `sign_contract` | 서명할 때 계좌(은행 + 가린 번호)를 남기고 문서 확인값에 넣는다 |
+| 계약서 양식 v2 "근로계약서" | 대표가 양식을 고친 적이 없을 때만 넣는다. 빈칸 `{{근로계약기간}}` 추가 |
+| 계약서 내용(`terms`) | `kind: "employment"`, `period`(일한 첫날·마지막 날). 출석 기록 기준: 참석·지각한 날, 휴게시간 뺀 근무 시간, 초과 근무, 교통비·지방비. 예전 계약서는 `kind`가 없어 용역계약서로 보인다 |
+

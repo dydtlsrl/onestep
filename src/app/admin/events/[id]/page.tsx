@@ -15,7 +15,8 @@ import {
   extrasTotal,
   formatEventRange,
   formatTime,
-  scheduledMinutes,
+  paidMinutes,
+  todayKst,
   toRoleRate,
   type ApplicationStatus,
   type Attendance,
@@ -162,7 +163,7 @@ function personTotals(apps: AppRow[], days: DayRow[], extras: ExtraRuleRow[], ru
     if ((a.attendance === "attended" || a.attendance === "late") && day) {
       total.workedDays += 1;
       total.pay += calculatePay(applicationRate(a, day).rate, rules, {
-        scheduledMinutes: scheduledMinutes(day.start_time, day.end_time),
+        scheduledMinutes: paidMinutes(day),
         overtimeMinutes: a.overtime_minutes,
       }).total;
     }
@@ -193,6 +194,11 @@ interface PaymentDbRow {
   memo: string;
   held_reason: string;
   payment_items: { kind: PaymentRow["computed"]["items"][number]["kind"]; label: string; amount: number; day_id: string | null; sort_order: number }[];
+}
+
+// 계약서는 일정이 끝난 뒤(마지막 날부터) 보낸다 (결정 #34)
+function eventEnded(endDate: string): boolean {
+  return todayKst(Date.now()) >= endDate;
 }
 
 // "계약"·"정산" 탭: 확정자별 계약 현황과 정산
@@ -233,10 +239,12 @@ async function settleTab(supabase: Supabase, event: EventRow, tab: "contracts" |
         memberId: m.memberId,
         name: m.name,
         hasPrivate: hasPrivate.has(m.memberId),
+        workedDays: m.actual.workedDays,
+        unknownDays: m.actual.unknownDays,
         contract: c ? { id: c.id, status: c.status, requestedAt: c.requested_at, signedAt: c.signed_at } : null,
       };
     });
-    return <ContractBoard eventId={event.id} rows={rows} canSend={canAct} />;
+    return <ContractBoard eventId={event.id} rows={rows} canSend={canAct} ended={eventEnded(event.end_date)} />;
   }
 
   const { data } = await paymentsQuery!;
@@ -420,7 +428,7 @@ export default async function EventDetailPage({
     const attendanceDays: AttendanceDay[] = days.map((d) => ({
       id: d.id,
       label: dayLabel(d),
-      scheduledMinutes: scheduledMinutes(d.start_time, d.end_time),
+      scheduledMinutes: paidMinutes(d),
       rows: selected
         .filter((a) => a.day_id === d.id)
         .sort((x, y) => x.role_name.localeCompare(y.role_name, "ko") || (x.member?.name ?? "").localeCompare(y.member?.name ?? "", "ko"))

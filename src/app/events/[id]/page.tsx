@@ -16,7 +16,7 @@ import {
   extrasForTier,
   formatEventRange,
   formatTime,
-  scheduledMinutes,
+  paidMinutes,
   toRoleRate,
   visibleApplicationStatus,
   type ApplicationStatus,
@@ -76,7 +76,7 @@ async function loadEvent(supabase: Supabase, id: string, userId: string, tier: M
   // 회원에게 보여 줄 예상 보수: 대표가 이 사람만 정한 단가 → 회원 기본 시급과 날짜 단가 중 높은 쪽 → 날짜 단가
   const dayChoices: DayChoice[] = (days ?? []).map((d) => {
     const rate = effectiveRate(toRoleRate(d), me?.default_rate ?? null, myApps.get(d.id)?.rate_override ?? null);
-    const total = calculatePay(rate, rules, { scheduledMinutes: scheduledMinutes(d.start_time, d.end_time), overtimeMinutes: 0 }).total;
+    const total = calculatePay(rate, rules, { scheduledMinutes: paidMinutes(d), overtimeMinutes: 0 }).total;
     return {
       id: d.id,
       label: dayLabel(d),

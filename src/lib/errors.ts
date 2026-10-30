@@ -40,6 +40,7 @@ const MESSAGES: Record<string, string> = {
   NOT_ALLOWED: "이 계정으로는 할 수 없어요.",
   HAS_UPCOMING_WORK: "확정된 일정이 아직 남아 있어요. 대표님께 먼저 말씀해 주세요.",
   HAS_PENDING_PAYMENT: "아직 받지 않은 보수가 있어요. 지급이 끝난 뒤에 탈퇴할 수 있어요.",
+  HAS_UNPAID_PAYMENT: "아직 지급하지 않은 정산이 있어요. 정산 메뉴에서 지급 완료로 바꾸거나, 일정의 정산 탭에서 다시 계산(일한 날이 없으면 취소됨)한 뒤 탈퇴 처리해 주세요.",
   ALREADY_WITHDRAWN: "이미 탈퇴한 계정이에요.",
   NOT_ON_ROSTER: "이 초대 링크는 대표님 명단에 있는 휴대폰 번호로만 가입할 수 있어요. 번호를 다시 확인하거나 대표님께 문의해 주세요.",
   PII_KEY_MISSING: "암호화 키(PII_ENCRYPTION_KEY)가 설정되지 않았어요. 대표님께 알려 주세요.",

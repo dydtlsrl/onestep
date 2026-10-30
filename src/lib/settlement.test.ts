@@ -17,6 +17,7 @@ const day = (over: Partial<DayRow>): DayRow => ({
   rate: 11000,
   min_paid_hours: null,
   overtime_rate: null,
+  break_minutes: 0,
   ...over,
 });
 
@@ -42,7 +43,6 @@ describe("buildPaymentItems", () => {
         { type: "regional", amount: 30000, perDay: false },
       ],
       DEFAULT_PAY_RULES,
-      "actual",
     );
     expect(r.items.map((i) => [i.kind, i.amount])).toEqual([
       ["work", 44000],
@@ -55,26 +55,25 @@ describe("buildPaymentItems", () => {
     expect(r).toMatchObject({ workAmount: 143000, extraAmount: 50000, workedDays: 2 });
   });
 
-  it("노쇼는 빼고, 미확인은 넣고 세어 둔다, 초과 근무 항목", () => {
+  it("노쇼·미확인은 빼고 미확인은 세어 둔다, 지각은 넣고 초과 근무 항목", () => {
     const r = buildPaymentItems(
-      [sel(setup, { attendance: "no_show" }), sel(main, { attendance: "unknown", overtimeMinutes: 60 })],
+      [sel(setup, { attendance: "no_show" }), sel(main, { attendance: "late", overtimeMinutes: 60 }), sel(day({ id: "u", day_date: "2026-11-09" }), { attendance: "unknown" })],
       null,
       [{ type: "transport", amount: 10000, perDay: true }],
       DEFAULT_PAY_RULES,
-      "actual",
     );
     expect(r.items.map((i) => i.kind)).toEqual(["work", "overtime", "transport"]);
     expect(r.items[1].amount).toBe(16500);
     expect(r).toMatchObject({ workedDays: 1, unknownDays: 1 });
   });
 
-  it("계약서용: 모든 날, 초과 없음, 개별 단가 반영", () => {
-    const r = buildPaymentItems([sel(main, { attendance: "no_show", overtimeMinutes: 120, rateOverride: 13000 })], 12000, [], DEFAULT_PAY_RULES, "planned");
-    expect(r.items).toEqual([{ kind: "work", label: "11/8(일) 진행 · 시급 13,000원 × 9시간", amount: 117000, day_id: "m" }]);
+  it("휴게시간은 근무 시간에서 빼고, 개별 단가 반영", () => {
+    const r = buildPaymentItems([sel(day({ id: "m", day_date: "2026-11-08", break_minutes: 60 }), { rateOverride: 13000 })], 12000, [], DEFAULT_PAY_RULES);
+    expect(r.items).toEqual([{ kind: "work", label: "11/8(일) 진행 · 시급 13,000원 × 8시간", amount: 104000, day_id: "m" }]);
   });
 
   it("모두 노쇼면 추가 지급도 없음", () => {
-    const r = buildPaymentItems([sel(main, { attendance: "no_show" })], null, [{ type: "regional", amount: 30000, perDay: false }], DEFAULT_PAY_RULES, "actual");
+    const r = buildPaymentItems([sel(main, { attendance: "no_show" })], null, [{ type: "regional", amount: 30000, perDay: false }], DEFAULT_PAY_RULES);
     expect(r.items).toEqual([]);
   });
 

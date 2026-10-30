@@ -55,6 +55,10 @@ function Result({ state }: { state: SettleState }) {
 
 type DraftRow = PaymentItemDraft & { key: number; amountText: string };
 
+function editorKey(saved: SavedPayment | null): string {
+  return saved ? `${saved.status}|${saved.edited}|${saved.payDate}|${JSON.stringify(saved.items)}` : "new";
+}
+
 // 한 사람의 지급 항목을 직접 고친다. 세금은 설정대로 바로 다시 계산해 보여 준다.
 function ItemEditor({ eventId, row, tax, defaultPayDate }: { eventId: string; row: PaymentRow; tax: TaxSettings; defaultPayDate: string }) {
   const [state, action] = useActionState<SettleState, FormData>(saveEditedPayment, {});
@@ -195,7 +199,8 @@ export function PaymentBoard({
       )}
       {unknown > 0 && (
         <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm leading-relaxed text-warn">
-          출석을 확인하지 않은 날이 {unknown}일 있어요. 참석한 것으로 계산했어요. 노쇼가 있다면 출석 확인 탭에서 먼저 바꿔 주세요.
+          출석을 확인하지 않은 날이 {unknown}일 있어요. 일하지 않은 것으로 보고 정산에서 뺐어요. 일했다면 출석 확인 탭에서 참석으로 바꾼 뒤 다시
+          계산해 주세요.
         </p>
       )}
       {stale > 0 && (
@@ -265,7 +270,10 @@ export function PaymentBoard({
                     ))}
                   </ul>
                 )}
-                {open === r.memberId && !locked && <ItemEditor eventId={eventId} row={r} tax={tax} defaultPayDate={defaultPayDate} />}
+                {open === r.memberId && !locked && (
+                  // 저장된 내용이 바뀌면(되돌리기·다시 계산) 편집기를 새로 연다. 예전에 고친 항목이 남아 다시 저장되지 않게.
+                  <ItemEditor key={editorKey(s)} eventId={eventId} row={r} tax={tax} defaultPayDate={defaultPayDate} />
+                )}
               </li>
             );
           })}

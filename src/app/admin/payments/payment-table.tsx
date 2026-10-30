@@ -29,13 +29,34 @@ const BADGE: Record<PaymentStatus, string> = {
 };
 
 // 누른 버튼의 status 값(paid·held·scheduled)이 함께 전송된다
-function StatusButton({ status, disabled, primary, children }: { status: string; disabled: boolean; primary?: boolean; children: React.ReactNode }) {
+function StatusButton({
+  status,
+  disabled,
+  primary,
+  confirmText,
+  children,
+}: {
+  status: string;
+  disabled: boolean;
+  primary?: boolean;
+  confirmText?: string;
+  children: React.ReactNode;
+}) {
   const { pending } = useFormStatus();
   const look = primary
     ? "bg-brand text-white hover:bg-brand-strong disabled:bg-line disabled:text-muted"
     : "border border-field bg-white text-ink hover:bg-ground disabled:text-muted";
   return (
-    <button type="submit" name="status" value={status} disabled={disabled || pending} className={`h-11 rounded-lg px-4 text-sm font-bold ${look}`}>
+    <button
+      type="submit"
+      name="status"
+      value={status}
+      disabled={disabled || pending}
+      onClick={(e) => {
+        if (confirmText && !window.confirm(confirmText)) e.preventDefault();
+      }}
+      className={`h-11 rounded-lg px-4 text-sm font-bold ${look}`}
+    >
       {pending ? "처리 중…" : children}
     </button>
   );
@@ -43,8 +64,15 @@ function StatusButton({ status, disabled, primary, children }: { status: string;
 
 // 지급일 하나의 정산 목록. 골라서 지급 완료·보류·보류 해제
 export function PaymentTable({ rows }: { rows: PayRow[] }) {
-  const [state, action] = useActionState<PayStatusState, FormData>(setPaymentStatus, {});
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  // 처리가 끝나면 고른 것을 비운다 (바뀐 줄이 고른 채 남아 다음 처리에 섞이지 않게)
+  const [state, action] = useActionState<PayStatusState, FormData>(async (prev, formData) => {
+    const result = await setPaymentStatus(prev, formData);
+    if (!result.error) setChecked(new Set());
+    return result;
+  }, {});
+  const checkedRows = rows.filter((r) => checked.has(r.id));
+  const checkedNet = checkedRows.reduce((sum, r) => sum + r.net, 0);
   const selectable = rows.filter((r) => r.status !== "paid" && r.status !== "cancelled");
   const allChecked = selectable.length > 0 && selectable.every((r) => checked.has(r.id));
   const toggle = (id: string) =>
@@ -125,7 +153,12 @@ export function PaymentTable({ rows }: { rows: PayRow[] }) {
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted">{checked.size}명 고름</span>
         <span className="ml-auto">
-          <StatusButton status="paid" disabled={checked.size === 0} primary>
+          <StatusButton
+            status="paid"
+            disabled={checked.size === 0}
+            primary
+            confirmText={`${checkedRows.length}명, 실지급 합계 ${formatWon(checkedNet)}을(를) 지급 완료로 바꿀까요?\n\n되돌릴 수 없고, 회원에게 지급 알림이 가요. 은행 이체를 마친 뒤에 눌러 주세요.`}
+          >
             지급 완료로 바꾸기
           </StatusButton>
         </span>

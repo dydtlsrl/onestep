@@ -56,6 +56,7 @@ export interface DayDraft {
   gatherTime: string;
   startTime: string;
   endTime: string;
+  breakMinutes: string; // 휴게시간(분). 비우면 0분
   headcount: string;
   payType: PayType;
   rate: string;
@@ -111,6 +112,7 @@ export function emptyEvent(rules: PayRules, roles: RoleOption[] = []): EventForm
         gatherTime: "",
         startTime: "",
         endTime: "",
+        breakMinutes: "",
         headcount: "1",
         ...defaultPay("main", roles, rules),
       },
@@ -160,6 +162,7 @@ export function eventToFormValues({ event, internal, chatLink, days, extras }: S
       gatherTime: formatTime(d.gather_time),
       startTime: formatTime(d.start_time),
       endTime: formatTime(d.end_time),
+      breakMinutes: d.break_minutes > 0 ? String(d.break_minutes) : "",
       headcount: String(d.headcount),
       payType: d.pay_type,
       rate: String(d.rate),
