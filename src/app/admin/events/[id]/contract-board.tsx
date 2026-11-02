@@ -11,6 +11,8 @@ export interface ContractRow {
   memberId: string;
   name: string;
   hasPrivate: boolean;
+  workedDays: number; // 출석 기록상 일한 날
+  unknownDays: number; // 출석을 확인하지 않은 날
   contract: { id: string; status: ContractStatus; requestedAt: string; signedAt: string | null } | null;
 }
 
@@ -55,13 +57,13 @@ function VoidForm({ eventId, contractId }: { eventId: string; contractId: string
   );
 }
 
-function SendOne({ eventId, memberId }: { eventId: string; memberId: string }) {
+function SendOne({ eventId, memberId, disabled }: { eventId: string; memberId: string; disabled: boolean }) {
   const [state, action] = useActionState<SettleState, FormData>(requestContracts, {});
   return (
     <form action={action} className="flex flex-col gap-1">
       <input type="hidden" name="eventId" value={eventId} />
       <input type="hidden" name="memberId" value={memberId} />
-      <SubmitButton variant="secondary" pendingText="보내는 중…" className="h-9 text-[13px]">
+      <SubmitButton variant="secondary" pendingText="보내는 중…" className="h-9 text-[13px]" disabled={disabled}>
         보내기
       </SubmitButton>
       <Result state={state} />
@@ -70,10 +72,15 @@ function SendOne({ eventId, memberId }: { eventId: string; memberId: string }) {
 }
 
 // 일정 상세의 "계약" 탭: 확정자에게 계약서 보내기, 서명 현황, 다시 알림, 무효
-export function ContractBoard({ eventId, rows, canSend }: { eventId: string; rows: ContractRow[]; canSend: boolean }) {
+// 계약서는 일정이 끝난 뒤, 출석 확인을 모두 마치고 보낸다 (출석 → 계약서 → 정산, 결정 #9·#34)
+export function ContractBoard({ eventId, rows, canSend, ended }: { eventId: string; rows: ContractRow[]; canSend: boolean; ended: boolean }) {
   const [sendState, sendAction] = useActionState<SettleState, FormData>(requestContracts, {});
   const [remindState, remindAction] = useActionState<SettleState, FormData>(remindContracts, {});
-  const notSent = rows.filter((r) => !r.contract || r.contract.status === "voided").length;
+  const unsent = rows.filter((r) => (!r.contract || r.contract.status === "voided") && r.workedDays > 0);
+  const notSent = unsent.length;
+  const unchecked = rows.filter((r) => r.unknownDays > 0);
+  const noWork = rows.filter((r) => r.workedDays === 0 && r.unknownDays === 0);
+  const ready = ended && unchecked.length === 0;
   const waiting = rows.filter((r) => r.contract?.status === "requested").length;
   const signed = rows.filter((r) => r.contract?.status === "signed").length;
 
@@ -92,11 +99,23 @@ export function ContractBoard({ eventId, rows, canSend }: { eventId: string; row
         ))}
       </dl>
 
+      {canSend && !ended && (
+        <p className="rounded-lg bg-brand-soft px-4 py-3 text-sm leading-relaxed text-brand-strong">
+          계약서는 일정이 끝난 뒤 보내요. 마지막 날부터 보낼 수 있어요. 순서: 출석 확인 → 계약서 → 정산
+        </p>
+      )}
+      {canSend && ended && unchecked.length > 0 && (
+        <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm leading-relaxed text-warn">
+          출석을 확인하지 않은 사람이 {unchecked.length}명 있어요 ({unchecked.map((r) => r.name).join(", ")}). 출석 확인 탭에서 먼저 끝내 주세요. 계약서에는 일한 날과
+          금액이 들어가요.
+        </p>
+      )}
+      {noWork.length > 0 && <p className="text-[13px] text-muted">일한 날이 없는 {noWork.length}명(노쇼)에게는 계약서를 보내지 않아요.</p>}
       {canSend ? (
         <div className="flex flex-wrap gap-2">
           <form action={sendAction}>
             <input type="hidden" name="eventId" value={eventId} />
-            <SubmitButton pendingText="보내는 중…" disabled={notSent === 0}>
+            <SubmitButton pendingText="보내는 중…" disabled={notSent === 0 || !ready}>
               {notSent > 0 ? `안 보낸 ${notSent}명에게 계약서 보내기` : "모두 보냈어요"}
             </SubmitButton>
           </form>
@@ -113,7 +132,8 @@ export function ContractBoard({ eventId, rows, canSend }: { eventId: string; row
       <Result state={sendState} />
       <Result state={remindState} />
       <p className="text-[13px] leading-relaxed text-muted">
-        계약서는 &ldquo;계약서 양식&rdquo; 메뉴의 최신 양식에, 지금 정해진 날짜·역할·단가로 계산한 예상 보수를 넣어 보내요. 보낸 뒤에 단가나 역할을 바꿨다면 무효로 하고 다시 보내세요. 확정을 풀면 계약서는 자동으로 무효가 돼요.
+        계약서는 &ldquo;계약서 양식&rdquo; 메뉴의 최신 양식에 출석 기록으로 계산한 내용(일한 날, 휴게시간을 뺀 근무 시간, 초과 근무, 교통비·지방비)을 넣어 보내요.
+        정산 금액과 같아요. 보낸 뒤에 출석이나 단가를 바꿨다면 무효로 하고 다시 보내세요. 확정을 풀면 계약서는 자동으로 무효가 돼요.
       </p>
 
       {rows.length === 0 ? (
@@ -137,7 +157,9 @@ export function ContractBoard({ eventId, rows, canSend }: { eventId: string; row
                     </Link>
                   )}
                   {r.contract && r.contract.status !== "voided" && <VoidForm eventId={eventId} contractId={r.contract.id} />}
-                  {canSend && (!r.contract || r.contract.status === "voided") && <SendOne eventId={eventId} memberId={r.memberId} />}
+                  {canSend && (!r.contract || r.contract.status === "voided") && r.workedDays > 0 && (
+                    <SendOne eventId={eventId} memberId={r.memberId} disabled={!ready} />
+                  )}
                 </span>
               </li>
             );

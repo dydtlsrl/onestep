@@ -33,7 +33,7 @@ describe("matchesPreset", () => {
 
 describe("activePresetId", () => {
   const twin: RoleOption = { ...setup, id: "r9", name: "필기 감독", default_for: null };
-  const day = { key: "d", dayDate: "", kind: "main" as const, gatherTime: "", startTime: "", endTime: "", headcount: "1" };
+  const day = { key: "d", dayDate: "", kind: "main" as const, gatherTime: "", startTime: "", endTime: "", breakMinutes: "", headcount: "1" };
 
   it("같은 금액의 단가가 여럿이면 버튼으로 고른 것만 표시", () => {
     expect(activePresetId({ ...day, ...presetValues(twin) }, [setup, twin])).toBe("r9");

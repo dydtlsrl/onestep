@@ -1,6 +1,6 @@
 // 정산·계약서에 들어갈 지급 항목을 만든다. 일정 상세의 출석 합계와 같은 계산(calculatePay)을 쓴다.
-import { dayLabel, EXTRA_TYPE_LABEL, scheduledMinutes, toRoleRate, type Attendance, type DayRow, type ExtraItem } from "@/lib/events";
-import { calculatePay, effectiveRate, PAY_TYPE_LABEL, type PayRules, type RoleRate } from "@/lib/pay";
+import { dayLabel, EXTRA_TYPE_LABEL, paidMinutes, toRoleRate, type Attendance, type DayRow, type ExtraItem } from "@/lib/events";
+import { calculatePay, effectiveRate, type PayRules, type RoleRate } from "@/lib/pay";
 
 export type PaymentItemKind = "work" | "overtime" | "transport" | "regional" | "other";
 export type PaymentStatus = "draft" | "scheduled" | "held" | "paid" | "cancelled";
@@ -60,19 +60,13 @@ export interface BuildResult {
   workAmount: number;
   extraAmount: number;
   workedDays: number;
-  unknownDays: number; // 출석을 확인하지 않은 날 (참석으로 계산함)
+  unknownDays: number; // 출석을 확인하지 않아 뺀 날
   missingOvertimeRate: boolean;
 }
 
-// mode "actual": 출석 기록으로 정산 (노쇼는 빼고, 미확인은 참석으로 넣고 알려 준다)
-// mode "planned": 계약서용 예상 금액 (확정된 모든 날, 초과 근무 없음)
-export function buildPaymentItems(
-  days: SelectedDay[],
-  memberDefault: number | null,
-  extras: ExtraItem[],
-  rules: PayRules,
-  mode: "actual" | "planned",
-): BuildResult {
+// 출석 기록으로 지급 항목을 만든다. 정산과 계약서(일정이 끝난 뒤 보냄)가 같이 쓴다.
+// 참석·지각한 날만 넣는다. 노쇼와 출석을 확인하지 않은 날은 빼고, 확인하지 않은 날은 세어 알려 준다 (결정 #9).
+export function buildPaymentItems(days: SelectedDay[], memberDefault: number | null, extras: ExtraItem[], rules: PayRules): BuildResult {
   const items: PaymentItemDraft[] = [];
   let workedDays = 0;
   let unknownDays = 0;
@@ -80,13 +74,16 @@ export function buildPaymentItems(
 
   const sorted = [...days].sort((a, b) => a.day.day_date.localeCompare(b.day.day_date) || a.day.start_time.localeCompare(b.day.start_time));
   for (const s of sorted) {
-    if (mode === "actual" && s.attendance === "no_show") continue;
-    if (mode === "actual" && s.attendance === "unknown") unknownDays += 1;
+    if (s.attendance === "no_show") continue;
+    if (s.attendance === "unknown") {
+      unknownDays += 1;
+      continue;
+    }
     workedDays += 1;
     const rate = rateFor(s.day, memberDefault, s.rateOverride);
     const pay = calculatePay(rate, rules, {
-      scheduledMinutes: scheduledMinutes(s.day.start_time, s.day.end_time),
-      overtimeMinutes: mode === "actual" ? s.overtimeMinutes : 0,
+      scheduledMinutes: paidMinutes(s.day),
+      overtimeMinutes: s.overtimeMinutes,
     });
     const label = dayLabel(s.day);
     items.push({ kind: "work", label: `${label} · ${describeWork(rate, pay.regularHours)}`, amount: pay.regularPay, day_id: s.day.id });
@@ -120,8 +117,4 @@ export function sumItems(items: Pick<PaymentItemDraft, "kind" | "amount">[]): { 
     else extraAmount += i.amount;
   }
   return { workAmount, extraAmount };
-}
-
-export function rateText(rate: RoleRate): string {
-  return `${PAY_TYPE_LABEL[rate.payType]} ${won(rate.rate)}`;
 }

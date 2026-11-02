@@ -144,6 +144,7 @@ export function EventForm({
         gatherTime: "",
         startTime: "14:00",
         endTime: "18:00",
+        breakMinutes: "",
         headcount: "1",
         ...defaultPay("setup", roles, rules),
       },
@@ -158,6 +159,7 @@ export function EventForm({
       gatherTime: d.gatherTime,
       startTime: d.startTime,
       endTime: d.endTime,
+      breakMinutes: digitsOnly(d.breakMinutes) || "0",
       headcount: d.headcount,
       payType: d.payType,
       rate: digitsOnly(d.rate) || "x",
@@ -205,7 +207,8 @@ export function EventForm({
       >
         <ol className="flex flex-col gap-4">
           {sorted.map((d, index) => {
-            const minutes = d.startTime && d.endTime ? scheduledMinutes(d.startTime, d.endTime) : 0;
+            const breakMinutes = Number(digitsOnly(d.breakMinutes)) || 0;
+            const minutes = d.startTime && d.endTime ? Math.max(0, scheduledMinutes(d.startTime, d.endTime) - breakMinutes) : 0;
             const locked = d.id ? lockedDayIds.includes(d.id) : false;
             const estimate = calculatePay(
               {
@@ -259,6 +262,17 @@ export function EventForm({
                   </Field>
                   <Field id={`${d.key}-end`} text="근무 종료" className="flex-[1_1_110px]">
                     <input id={`${d.key}-end`} type="time" required value={d.endTime} onChange={(e) => updateDay(d.key, { endTime: e.target.value })} className={field} />
+                  </Field>
+                  <Field id={`${d.key}-break`} text="휴게(분)" className="flex-[1_1_90px]">
+                    <input
+                      id={`${d.key}-break`}
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={d.breakMinutes}
+                      onChange={(e) => updateDay(d.key, { breakMinutes: e.target.value })}
+                      aria-describedby={`${d.key}-break-hint`}
+                      className={`${field} text-right`}
+                    />
                   </Field>
                 </div>
                 <div className="flex flex-col gap-3 rounded-lg bg-[#f8f9fa] p-3">
@@ -329,8 +343,11 @@ export function EventForm({
                 </div>
                 <p className="text-[13px] text-muted">
                   1인 예상 보수 (초과 없이): <strong className="text-ink">{formatWon(estimate.total)}</strong>
-                  {d.payType === "hourly" && minutes > 0 && ` · ${minutes / 60}시간${estimate.minimumApplied ? ", 최소 보장 적용" : ""}`}
+                  {d.payType === "hourly" && minutes > 0 && ` · ${Number((minutes / 60).toFixed(2))}시간${breakMinutes > 0 ? ` (휴게 ${breakMinutes}분 뺌)` : ""}${estimate.minimumApplied ? ", 최소 보장 적용" : ""}`}
                   {locked && " · 신청이 있어 뺄 수 없어요"}
+                </p>
+                <p id={`${d.key}-break-hint`} className="-mt-2 text-[13px] text-muted">
+                  휴게(분): 점심 등 보수에서 빼는 시간. 고객사마다 달라서 일정마다 적어요. 빼지 않으면 비워 두세요.
                 </p>
               </li>
             );

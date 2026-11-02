@@ -1,5 +1,5 @@
-// 핵심 흐름 한 바퀴: 초대 → 가입 신청 → 승인 → 일정 등록·공개 → 신청 → 확정·알림 → 계약서 보내기 → 정산 정보 등록·서명
-// → 출석 → 세금 설정 → 정산 만들기 → 지급 완료 → 회원이 받은 금액 확인.
+// 핵심 흐름 한 바퀴: 초대 → 가입 신청 → 승인 → 일정 등록·공개 → 신청 → 확정·알림 → (일정 끝남) → 출석
+// → 계약서 보내기 → 정산 정보 등록·서명 → 세금 설정 → 정산 만들기 → 지급 완료 → 회원이 받은 금액 확인.
 // 대표와 회원이 각자 브라우저 창을 열고 실제 화면의 버튼을 누른다.
 import { expect, test, type Page } from "@playwright/test";
 import { createAccount, dumpPage, openAs, serviceClient, testEmail } from "./support";
@@ -107,6 +107,25 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
     await expect(admin.getByRole("button", { name: /알림 보내기 \(0명\)/ })).toBeVisible();
   });
 
+  // 계약서는 일정이 끝난 뒤 보낸다 (결정 #34). 시간이 지난 것처럼 일정 날짜를 어제로 옮긴다.
+  await test.step("일정이 끝남 (날짜를 어제로)", async () => {
+    const db = serviceClient();
+    const yesterday = kstDate(-1);
+    const { error: dayError } = await db.from("event_days").update({ day_date: yesterday }).eq("event_id", eventId);
+    expect(dayError).toBeNull();
+    const { error: eventError } = await db.from("events").update({ start_date: yesterday, end_date: yesterday }).eq("id", eventId);
+    expect(eventError).toBeNull();
+  });
+
+  await test.step("대표: 출석 확인", async () => {
+    await admin.goto(`${eventPath}?tab=attendance`);
+    const row = admin.locator("form").filter({ hasText: memberName }).first();
+    await row.getByText("참석", { exact: true }).click();
+    await row.getByRole("button", { name: "저장" }).click();
+    // 저장되면 바뀐 것이 없어져 "저장" 버튼이 다시 꺼진다
+    await expect(row.getByRole("button", { name: "저장" })).toBeDisabled();
+  });
+
   await test.step("대표: 계약서 보내기", async () => {
     await admin.goto(`${eventPath}?tab=contracts`);
     await admin.getByRole("button", { name: /안 보낸 1명에게 계약서 보내기/ }).click();
@@ -134,15 +153,6 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
     // 서명이 저장되면 "아래에서 서명해 주세요" 안내와 서명란이 사라진다
     await expect(member.getByText("내용을 끝까지 읽고 아래에서 서명해 주세요", { exact: false })).toHaveCount(0);
     await expect(member.getByRole("button", { name: /서명/ })).toHaveCount(0);
-  });
-
-  await test.step("대표: 출석 확인", async () => {
-    await admin.goto(`${eventPath}?tab=attendance`);
-    const row = admin.locator("form").filter({ hasText: memberName }).first();
-    await row.getByText("참석", { exact: true }).click();
-    await row.getByRole("button", { name: "저장" }).click();
-    // 저장되면 바뀐 것이 없어져 "저장" 버튼이 다시 꺼진다
-    await expect(row.getByRole("button", { name: "저장" })).toBeDisabled();
   });
 
   await test.step("대표: 세금 처리 방식 정하기", async () => {
@@ -179,7 +189,7 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
     const [{ data: profile }, { data: apps }, { data: contracts }, { data: payments }, { data: priv }] = await Promise.all([
       db.from("profiles").select("status, tier").eq("id", memberId).single(),
       db.from("applications").select("status, attendance").eq("event_id", eventId).eq("member_id", memberId),
-      db.from("contracts").select("status, signed_at").eq("event_id", eventId).eq("member_id", memberId),
+      db.from("contracts").select("status, signed_at, signer_account, terms").eq("event_id", eventId).eq("member_id", memberId),
       db.from("payments").select("status, gross, income_tax, net").eq("event_id", eventId).eq("member_id", memberId),
       db.from("member_private").select("rrn_masked, account_masked").eq("member_id", memberId).single(),
     ]);
@@ -187,6 +197,9 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
     expect(apps).toEqual([{ status: "selected", attendance: "attended" }]);
     expect(contracts).toHaveLength(1);
     expect(contracts![0].status).toBe("signed");
+    // 근로계약서: 출석 기록 기준 금액(정산과 같음), 서명할 때의 계좌
+    expect(contracts![0].terms).toMatchObject({ kind: "employment", total: 99000, period: { start: kstDate(-1), end: kstDate(-1) } });
+    expect(contracts![0].signer_account).toBe("KB국민은행 ****1234");
     expect(payments).toHaveLength(1);
     expect(payments![0].status).toBe("paid");
     // 08:00~17:00, 시급 11,000원 → 9시간 99,000원. 기타소득 8.8%는 125,000원 이하라 세금 0원 (과세최저한)

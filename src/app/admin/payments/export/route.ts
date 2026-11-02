@@ -14,8 +14,18 @@ interface Row {
   event: { title: string } | null;
 }
 
+// 숫자처럼 보이지만 글자로 다뤄야 하는 값 (계좌번호). 엑셀이 1.23E+13으로 바꾸거나 앞의 0·뒷자리를 잃지 않게 한다.
+interface TextCell {
+  text: string;
+}
+type Cell = string | number | TextCell;
+
 // 엑셀에서 수식으로 실행되지 않게 = + - @ 로 시작하는 값 앞에 ' 를 붙인다
-function cell(value: string | number): string {
+function cell(value: Cell): string {
+  if (typeof value === "object") {
+    // 숫자만 있을 때만 ="…" 로 감싼다 (엑셀이 글자로 읽는 방식). 숫자가 아니면 보통 칸처럼 다룬다.
+    return /^[0-9]+$/.test(value.text) ? `"=""${value.text}"""` : cell(value.text);
+  }
   let v = String(value);
   if (/^[=+\-@\t\r]/.test(v)) v = `'${v}`;
   return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
@@ -59,7 +69,7 @@ export async function GET(request: NextRequest) {
     }
   };
 
-  let lines: (string | number)[][];
+  let lines: Cell[][];
   let total = 0;
   if (kind === "transfer") {
     // 같은 사람이 같은 날 여러 일정을 받으면 한 줄로 합친다
@@ -74,7 +84,16 @@ export async function GET(request: NextRequest) {
     for (const [memberId, m] of byMember) {
       const p = privOf.get(memberId);
       total += m.net;
-      lines.push([p?.bank_name ?? "(미등록)", open(secretOf.get(memberId)?.account_enc), p?.account_holder ?? "", m.net, "원스텝", m.name, m.titles.join(", ")]);
+      const account = secretOf.get(memberId)?.account_enc;
+      lines.push([
+        p?.bank_name ?? "(계좌 미등록·이체 전 확인)",
+        account ? { text: open(account) } : "(계좌 미등록)",
+        p?.account_holder ?? "",
+        m.net,
+        "원스텝",
+        m.name,
+        m.titles.join(", "),
+      ]);
     }
   } else {
     lines = [["이름", "주민등록번호", "일정", "세전 금액", "소득세", "지방소득세", "실지급액"]];

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { parseCompany, parseTerms, placeholderValues, renderTemplate, unknownPlaceholders, type ContractTerms } from "./contract";
 
 const terms: ContractTerms = {
+  kind: "employment",
+  period: { start: "2026-11-07", end: "2026-11-08" },
   company: parseCompany({ name: "원스텝", ceo: "홍길동" }),
   member: { name: "서하늘", phone: "01000000000" },
   event: { title: "공사 필기시험", location: "OO중학교", address: "" },
@@ -27,6 +29,12 @@ describe("contract", () => {
     expect(v.지급예정일).toBe("회사가 정한 지급일");
   });
 
+  it("근로계약기간: 첫날~마지막 날, 하루면 (1일), 없으면 표를 가리킨다", () => {
+    expect(placeholderValues(terms).근로계약기간).toBe("2026년 11월 7일부터 2026년 11월 8일까지");
+    expect(placeholderValues({ ...terms, period: { start: "2026-11-08", end: "2026-11-08" } }).근로계약기간).toBe("2026년 11월 8일 (1일)");
+    expect(placeholderValues({ ...terms, period: null }).근로계약기간).toBe("위 표의 날짜");
+  });
+
   it("모르는 빈칸을 찾는다", () => {
     expect(unknownPlaceholders("{{이름}} {{이룸}} {{이룸}}")).toEqual(["이룸"]);
   });
@@ -34,5 +42,8 @@ describe("contract", () => {
   it("저장된 내용 읽기", () => {
     expect(parseTerms(null)).toBeNull();
     expect(parseTerms(terms)?.total).toBe(143000);
+    // 예전에 보낸 계약서(종류·기간 없음)는 용역계약서로 읽는다
+    const old = { ...terms, kind: undefined, period: undefined };
+    expect(parseTerms(old)).toMatchObject({ kind: "service", period: null });
   });
 });

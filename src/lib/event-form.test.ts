@@ -19,6 +19,7 @@ const examDay = {
   gatherTime: "07:30",
   startTime: "08:00",
   endTime: "13:00",
+  breakMinutes: "30",
   headcount: 24,
   payType: "daily",
   rate: 110000,
@@ -65,7 +66,8 @@ describe("readEventForm", () => {
     expect(args.event.all_days_required).toBe(true);
     expect(args.days).toHaveLength(2);
     expect(args.days[0]).toMatchObject({ day_date: "2026-11-07", kind: "setup", gather_time: "", headcount: 4, pay_type: "hourly", rate: 11000, min_paid_hours: 4, overtime_rate: null });
-    expect(args.days[1]).toMatchObject({ pay_type: "daily", rate: 110000, min_paid_hours: null, overtime_rate: 15000 });
+    expect(args.days[0].break_minutes).toBe(0);
+    expect(args.days[1]).toMatchObject({ pay_type: "daily", rate: 110000, min_paid_hours: null, overtime_rate: 15000, break_minutes: 30 });
     expect(args.extras).toEqual([
       { type: "transport", tier: "all", amount: 10000, per_day: true },
       { type: "regional", tier: "core", amount: 30000, per_day: false },
@@ -81,6 +83,12 @@ describe("readEventForm", () => {
     const parsed = readEventForm(form({ days: JSON.stringify([setupDay, { ...examDay, endTime: "07:00" }]) }));
     expect(parsed.success).toBe(false);
     if (!parsed.success) expect(firstIssueMessage(parsed.error)).toBe("2일차: 끝나는 시간이 시작 시간보다 늦어야 해요.");
+  });
+
+  it("휴게시간이 근무 시간보다 길면 실패", () => {
+    const parsed = readEventForm(form({ days: JSON.stringify([{ ...examDay, breakMinutes: "300" }]) }));
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) expect(firstIssueMessage(parsed.error)).toBe("1일차: 휴게시간이 근무 시간보다 길어요.");
   });
 
   it("날짜가 없거나, 인원이 0이거나, 톡방 링크가 https가 아니면 실패", () => {

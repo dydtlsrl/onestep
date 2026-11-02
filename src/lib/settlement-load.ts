@@ -8,7 +8,7 @@ import {
   dayLabel,
   extrasForTier,
   formatTime,
-  scheduledMinutes,
+  paidMinutes,
   suggestPayDate,
   type Attendance,
   type DayRow,
@@ -76,7 +76,7 @@ export async function loadSettlement(supabase: Supabase, eventId: string) {
   const members: MemberSettlement[] = [...byMember.entries()]
     .map(([memberId, { app, days: selected }]) => {
       const tier = app.member?.tier ?? "general";
-      const actual = buildPaymentItems(selected, app.member?.default_rate ?? null, extrasForTier(extras ?? [], tier), rules, "actual");
+      const actual = buildPaymentItems(selected, app.member?.default_rate ?? null, extrasForTier(extras ?? [], tier), rules);
       return {
         memberId,
         name: app.member?.name ?? "(알 수 없음)",
@@ -105,29 +105,34 @@ export async function loadSettlement(supabase: Supabase, eventId: string) {
 
 export type Settlement = NonNullable<Awaited<ReturnType<typeof loadSettlement>>>;
 
-// 계약서에 복사해 둘 내용 (확정된 모든 날, 정해진 시간 기준 예상 금액)
+// 계약서에 복사해 둘 내용. 계약서는 일정이 끝난 뒤 보내므로 정산과 같은 출석 기록 기준이다 (결정 #34·#35).
+// 참석·지각한 날, 휴게시간을 뺀 근무 시간, 초과 근무, 교통비·지방비를 모두 넣는다.
 export function contractTerms(s: Settlement, m: MemberSettlement): ContractTerms {
   const memberDefault = s.memberDefaultRate(m.memberId);
-  const sorted = [...m.days].sort((a, b) => a.day.day_date.localeCompare(b.day.day_date) || a.day.start_time.localeCompare(b.day.start_time));
-  const days = sorted.map((d) => {
+  const worked = m.days
+    .filter((d) => d.attendance === "attended" || d.attendance === "late")
+    .sort((a, b) => a.day.day_date.localeCompare(b.day.day_date) || a.day.start_time.localeCompare(b.day.start_time));
+  const days = worked.map((d) => {
     const rate = rateFor(d.day, memberDefault, d.rateOverride);
-    const pay = calculatePay(rate, s.rules, { scheduledMinutes: scheduledMinutes(d.day.start_time, d.day.end_time), overtimeMinutes: 0 });
+    const pay = calculatePay(rate, s.rules, { scheduledMinutes: paidMinutes(d.day), overtimeMinutes: d.overtimeMinutes });
+    const overtime = pay.overtimePay > 0 ? ` + 초과 ${Number(pay.overtimeHours.toFixed(2))}시간` : "";
     return {
       label: dayLabel(d.day),
-      time: `${formatTime(d.day.start_time)}–${formatTime(d.day.end_time)}`,
+      time: `${formatTime(d.day.start_time)}–${formatTime(d.day.end_time)}${d.day.break_minutes > 0 ? ` (휴게 ${d.day.break_minutes}분)` : ""}`,
       role: d.roleName,
-      pay: describeWork(rate, pay.regularHours),
-      amount: pay.regularPay,
+      pay: describeWork(rate, pay.regularHours) + overtime,
+      amount: pay.total,
     };
   });
-  const planned = buildPaymentItems(m.days, memberDefault, extrasForTier(s.extras, m.tier), s.rules, "planned");
   return {
+    kind: "employment",
+    period: worked.length > 0 ? { start: worked[0].day.day_date, end: worked[worked.length - 1].day.day_date } : null,
     company: s.company,
     member: { name: m.name, phone: formatPhone(m.phone) },
     event: { title: s.event.title, location: s.event.location_name, address: s.event.address },
     days,
-    extras: planned.items.filter((i) => i.kind === "transport" || i.kind === "regional").map((i) => ({ label: i.label, amount: i.amount })),
-    total: planned.workAmount + planned.extraAmount,
+    extras: m.actual.items.filter((i) => i.kind !== "work" && i.kind !== "overtime").map((i) => ({ label: i.label, amount: i.amount })),
+    total: m.actual.workAmount + m.actual.extraAmount,
     pay_date: s.payDate,
     rrn_display: s.rrnDisplay,
   };

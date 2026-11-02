@@ -72,12 +72,13 @@ export function PrivateInfoForm({ current, defaultHolder }: { current: PrivateSu
       </div>
       <div className="flex flex-col gap-1.5">
         <label htmlFor="pi-address" className="text-sm font-bold">
-          주소 <span className="font-normal text-muted">(계약서에 들어가요)</span>
+          주소 <span className="font-normal text-muted">(계약서에 들어가요. 시·구까지만 적어도 돼요)</span>
         </label>
-        <input id="pi-address" name="address" defaultValue={current?.address ?? ""} maxLength={200} placeholder="예: 서울시 OO구 OO로 12" className={input} />
+        <input id="pi-address" name="address" defaultValue={current?.address ?? ""} maxLength={200} placeholder="예: 서울시 마포구" className={input} />
       </div>
       <p className="text-[13px] leading-relaxed text-muted">
-        주민등록번호와 계좌번호는 암호화해서 보관해요. 보수 지급과 원천징수 신고에만 쓰고, 대표님이 볼 때마다 기록이 남아요.
+        주민등록번호는 인력비(원천징수) 신고에 꼭 필요해요. 주민등록번호와 계좌번호는 암호화해서 보관하고, 보수 지급과 신고에만 써요. 대표님이 볼 때마다
+        기록이 남아요. 한 번 등록하면 다음 계약서부터는 확인하고 서명만 하면 돼요.
       </p>
       <SubmitButton pendingText="저장 중…" className="h-12">
         {editing ? "정산 정보 고치기" : "정산 정보 등록하기"}

@@ -16,6 +16,7 @@ interface ContractRow extends Omit<ContractView, "terms"> {
   terms: unknown;
   signer_rrn_masked: string | null;
   signer_address: string | null;
+  signer_account: string | null;
 }
 
 // 계약서 보기·서명 (CON-03~05). 회원은 자기 계약서만, 대표는 모두 볼 수 있다(DB 권한 규칙).
@@ -26,7 +27,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
 
   const { data: contract } = await supabase
     .from("contracts")
-    .select("id, member_id, event_id, title, body, terms, status, requested_at, signed_at, signature, document_hash, sign_ip, voided_at, void_reason, signer_rrn_masked, signer_address")
+    .select("id, member_id, event_id, title, body, terms, status, requested_at, signed_at, signature, document_hash, sign_ip, voided_at, void_reason, signer_rrn_masked, signer_address, signer_account")
     .eq("id", id)
     .maybeSingle<ContractRow>();
   const terms = parseTerms(contract?.terms);
@@ -42,6 +43,8 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
   const masked = contract.signer_rrn_masked ?? priv?.rrn_masked ?? "";
   const rrn = await contractRrn(supabase, { display: terms.rrn_display, memberId: contract.member_id, viewerId: userId, masked });
   const address = contract.signer_address ?? priv?.address ?? "";
+  // 서명한 계약서는 서명할 때의 계좌, 서명 전에는 지금 등록된 계좌 (은행 + 가린 번호)
+  const account = contract.signer_account ?? (priv ? `${priv.bank_name} ${priv.account_masked}` : "");
   const back = profile.role === "admin" ? `/admin/events/${contract.event_id}?tab=contracts` : "/contracts";
 
   return (
@@ -59,7 +62,7 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
         </p>
       )}
 
-      <ContractDocument contract={{ ...contract, terms }} rrn={rrn || "(정산 정보 등록 전)"} address={address} />
+      <ContractDocument contract={{ ...contract, terms }} rrn={rrn || "(정산 정보 등록 전)"} address={address} account={account || "(정산 정보 등록 전)"} />
 
       {isOwner && contract.status === "requested" &&
         (priv ? (

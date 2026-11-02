@@ -1,6 +1,6 @@
 // 일정 등록·수정 폼 입력값 검사. DB 함수(create_event, update_event)에 넘길 모양으로 바꾼다.
 import { z } from "zod";
-import { kstLocalToIso } from "@/lib/events";
+import { kstLocalToIso, scheduledMinutes } from "@/lib/events";
 
 const time = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/, "시간을 확인해 주세요.");
 const optionalTime = z.union([z.literal(""), time]);
@@ -17,6 +17,12 @@ const daySchema = z
     gatherTime: optionalTime,
     startTime: time,
     endTime: time,
+    breakMinutes: z.coerce
+      .number({ error: "휴게시간을 분 단위 숫자로 적어 주세요." })
+      .int("휴게시간을 분 단위 숫자로 적어 주세요.")
+      .min(0)
+      .max(600, "휴게시간은 600분까지예요.")
+      .default(0),
     headcount: z.coerce.number({ error: "모집 인원을 숫자로 적어 주세요." }).int().min(1, "모집 인원은 1명 이상이에요.").max(500),
     payType: z.enum(["hourly", "daily"]),
     rate: money("단가"),
@@ -24,6 +30,10 @@ const daySchema = z
     overtimeRate: z.union([z.literal(""), z.null(), money("초과 금액")]).optional(),
   })
   .refine((d) => d.endTime > d.startTime, { message: "끝나는 시간이 시작 시간보다 늦어야 해요.", path: ["endTime"] })
+  .refine((d) => d.endTime <= d.startTime || d.breakMinutes < scheduledMinutes(d.startTime, d.endTime), {
+    message: "휴게시간이 근무 시간보다 길어요.",
+    path: ["breakMinutes"],
+  })
   .refine((d) => !d.gatherTime || d.gatherTime <= d.startTime, {
     message: "집합 시간은 시작 시간보다 빠르거나 같아야 해요.",
     path: ["gatherTime"],
@@ -114,6 +124,7 @@ export function toEventRpcArgs(v: EventFormInput) {
     gather_time: d.gatherTime,
     start_time: d.startTime,
     end_time: d.endTime,
+    break_minutes: d.breakMinutes,
     headcount: d.headcount,
     pay_type: d.payType,
     rate: d.rate,

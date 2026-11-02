@@ -115,8 +115,8 @@ select public.request_contract(:'ev', '00000000-0000-0000-0000-00000000005b', :'
 select public.request_contract(:'ev', '00000000-0000-0000-0000-00000000005c', :'tpl', '계약 테스트 시험 용역 계약서', '본문 B', '{"total":99000}') as con_b \gset
 select tests.expect_error(format($$select public.request_contract(%L, '00000000-0000-0000-0000-00000000005b', %L, '계약', '본문', '{}')$$, :'ev', :'tpl'), 'CONTRACT_EXISTS');
 select tests.expect_true(public.remind_contracts(:'ev') = 2, '대표: 서명 안 한 사람에게 다시 알림');
-select tests.expect_count('select * from public.contract_templates', 1, '대표: 양식 봄');
-select tests.expect_true(public.save_contract_template('새 양식', '{{이름}} 본문') = 2, '양식 고치면 새 버전');
+select tests.expect_count('select * from public.contract_templates', 2, '대표: 양식 봄 (기본 용역계약서 1, 근로계약서 2)');
+select tests.expect_true(public.save_contract_template('새 양식', '{{이름}} 본문') = 3, '양식 고치면 새 버전');
 reset role;
 select tests.expect_count($$select 1 from public.notifications where type = 'contract.requested'$$, 2, '서명 요청 알림');
 

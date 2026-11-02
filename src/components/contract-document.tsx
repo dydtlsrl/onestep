@@ -1,4 +1,4 @@
-import { type ContractTerms } from "@/lib/contract";
+import { partyLabels, type ContractTerms } from "@/lib/contract";
 import { formatFullDateTime } from "@/lib/format";
 
 export interface ContractView {
@@ -34,8 +34,9 @@ function Party({ title, rows }: { title: string; rows: [string, string][] }) {
 }
 
 // A4 한 장 모양의 계약서. 화면에서도, 인쇄(PDF로 저장)할 때도 이 모양 그대로 나온다.
-export function ContractDocument({ contract, rrn, address }: { contract: ContractView; rrn: string; address: string }) {
+export function ContractDocument({ contract, rrn, address, account }: { contract: ContractView; rrn: string; address: string; account: string }) {
   const t = contract.terms;
+  const label = partyLabels(t.kind);
   const signedDate = contract.signed_at ? formatFullDateTime(contract.signed_at) : null;
   return (
     <article className="contract-paper relative mx-auto flex w-full max-w-[210mm] flex-col gap-5 bg-white px-5 py-8 text-ink shadow-sm sm:px-12 print:max-w-none print:px-0 print:py-0 print:shadow-none">
@@ -48,7 +49,7 @@ export function ContractDocument({ contract, rrn, address }: { contract: Contrac
 
       <div className="flex flex-wrap gap-3">
         <Party
-          title="회사 (갑)"
+          title={label.company}
           rows={[
             ["상호", t.company.name],
             ["대표자", t.company.ceo],
@@ -58,18 +59,19 @@ export function ContractDocument({ contract, rrn, address }: { contract: Contrac
           ]}
         />
         <Party
-          title="용역자 (을)"
+          title={label.member}
           rows={[
             ["이름", t.member.name],
             ["주민등록번호", rrn],
             ["주소", address],
             ["연락처", t.member.phone],
+            ["계좌", account],
           ]}
         />
       </div>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-[15px] font-bold">용역 내용과 보수</h2>
+        <h2 className="text-[15px] font-bold">{label.work}</h2>
         <p className="text-[13px] text-body">
           {t.event.title}
           {(t.event.location || t.event.address) && ` · ${[t.event.location, t.event.address].filter(Boolean).join(" ")}`}
@@ -107,7 +109,7 @@ export function ContractDocument({ contract, rrn, address }: { contract: Contrac
               ))}
               <tr className="font-bold">
                 <td colSpan={3} className="border border-ink/50 px-2 py-1.5">
-                  합계 (세전, 초과 근무 별도)
+                  {t.kind === "employment" ? "합계 (세전)" : "합계 (세전, 초과 근무 별도)"}
                 </td>
                 <td className="border border-ink/50 px-2 py-1.5 text-right whitespace-nowrap">{won(t.total)}</td>
               </tr>
@@ -122,13 +124,13 @@ export function ContractDocument({ contract, rrn, address }: { contract: Contrac
         <p className="text-[15px]">{signedDate ? `서명일시: ${signedDate}` : "아래에 서명하면 계약이 맺어져요."}</p>
         <div className="flex w-full flex-wrap justify-around gap-6 text-[14px]">
           <div className="flex flex-col items-center gap-1">
-            <span className="text-muted">회사 (갑)</span>
+            <span className="text-muted">{label.company}</span>
             <span className="font-bold">
               {t.company.name} {t.company.ceo && `대표 ${t.company.ceo}`}
             </span>
           </div>
           <div className="flex flex-col items-center gap-1">
-            <span className="text-muted">용역자 (을)</span>
+            <span className="text-muted">{label.member}</span>
             <span className="font-bold">{t.member.name}</span>
             {contract.signature ? (
               // eslint-disable-next-line @next/next/no-img-element -- 서명 이미지는 DB에 저장된 data URL이다

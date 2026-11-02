@@ -5,10 +5,11 @@ export const PLACEHOLDERS: { key: string; help: string }[] = [
   { key: "대표자", help: "설정의 대표자 이름" },
   { key: "이름", help: "회원 이름" },
   { key: "행사명", help: "일정 이름" },
-  { key: "일자", help: "참여하는 날짜들" },
+  { key: "일자", help: "일한 날짜들" },
+  { key: "근로계약기간", help: "일한 첫날 ~ 마지막 날" },
   { key: "장소", help: "장소 이름과 주소" },
   { key: "역할", help: "대표가 정한 역할 (없으면 현장 배정)" },
-  { key: "금액", help: "예상 보수 합계" },
+  { key: "금액", help: "보수 합계 (출석 기록 기준, 교통비·지방비 포함)" },
   { key: "지급예정일", help: "일정의 지급 예정일" },
 ];
 
@@ -40,8 +41,13 @@ export interface ContractDay {
   amount: number;
 }
 
+// 계약서 종류: 근로계약서(사업주·근로자)와 예전 용역계약서(회사·용역자). 표시 이름만 다르다.
+export type ContractKind = "employment" | "service";
+
 // 계약서에 복사해 두는 요청 시점의 내용
 export interface ContractTerms {
+  kind: ContractKind;
+  period: { start: string; end: string } | null; // 일한 첫날·마지막 날 (YYYY-MM-DD)
   company: CompanyInfo;
   member: { name: string; phone: string };
   event: { title: string; location: string; address: string };
@@ -55,7 +61,10 @@ export interface ContractTerms {
 export function parseTerms(value: unknown): ContractTerms | null {
   const v = value as Partial<ContractTerms> | null;
   if (!v || !v.company || !v.member || !v.event || !Array.isArray(v.days)) return null;
+  const period = v.period && typeof v.period.start === "string" && typeof v.period.end === "string" ? v.period : null;
   return {
+    kind: v.kind === "employment" ? "employment" : "service",
+    period,
     company: parseCompany(v.company),
     member: v.member,
     event: v.event,
@@ -69,10 +78,26 @@ export function parseTerms(value: unknown): ContractTerms | null {
 
 const won = (n: number) => `${n.toLocaleString("ko-KR")}원`;
 
-function formatPayDate(date: string | null): string {
-  if (!date) return "회사가 정한 지급일";
+function formatFullDate(date: string): string {
   const [y, m, d] = date.split("-").map(Number);
   return `${y}년 ${m}월 ${d}일`;
+}
+
+function formatPayDate(date: string | null): string {
+  return date ? formatFullDate(date) : "회사가 정한 지급일";
+}
+
+function formatPeriod(period: ContractTerms["period"]): string {
+  if (!period) return "위 표의 날짜";
+  if (period.start === period.end) return `${formatFullDate(period.start)} (1일)`;
+  return `${formatFullDate(period.start)}부터 ${formatFullDate(period.end)}까지`;
+}
+
+// 계약서 칸 이름 (근로계약서 / 예전 용역계약서)
+export function partyLabels(kind: ContractKind) {
+  return kind === "employment"
+    ? { company: "사업주", member: "근로자", work: "근로 내용과 임금" }
+    : { company: "회사 (갑)", member: "용역자 (을)", work: "용역 내용과 보수" };
 }
 
 export function placeholderValues(terms: ContractTerms): Record<string, string> {
@@ -83,6 +108,7 @@ export function placeholderValues(terms: ContractTerms): Record<string, string> 
     이름: terms.member.name,
     행사명: terms.event.title,
     일자: terms.days.map((d) => d.label).join(", "),
+    근로계약기간: formatPeriod(terms.period),
     장소: [terms.event.location, terms.event.address].filter(Boolean).join(" · ") || "현장 안내에 따름",
     역할: roles.length > 0 ? roles.join(", ") : "현장 배정",
     금액: won(terms.total),
