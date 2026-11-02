@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
 // 회원은 회원 목록·가입 승인·초대 링크를 탭으로 묶은 한 화면이다 (also: 그 탭들의 주소)
-const LINKS: { href: string; label: string; also?: string[] }[] = [
+const LINKS: { href: string; label: string; also?: string[]; exact?: boolean }[] = [
+  { href: "/admin", label: "홈", exact: true },
   { href: "/admin/events", label: "일정" },
   { href: "/admin/members", label: "회원", also: ["/admin/applications", "/admin/invites", "/admin/roster"] },
   { href: "/admin/payments", label: "정산" },
@@ -30,7 +31,7 @@ export function AdminNav({ pendingCount }: { pendingCount: number }) {
   return (
     <ul ref={listRef} className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:overflow-visible md:p-0">
       {LINKS.map((link) => {
-        const active = [link.href, ...(link.also ?? [])].some((href) => pathname.startsWith(href));
+        const active = link.exact ? pathname === link.href : [link.href, ...(link.also ?? [])].some((href) => pathname.startsWith(href));
         return (
           <li key={link.href} className="shrink-0">
             <Link

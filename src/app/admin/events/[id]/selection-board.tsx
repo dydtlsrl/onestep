@@ -139,6 +139,7 @@ export function SelectionBoard({
   editable,
   canAdd,
   pendingNotify,
+  chatLinkMissing,
 }: {
   eventId: string;
   days: DayOption[];
@@ -148,6 +149,7 @@ export function SelectionBoard({
   editable: boolean;
   canAdd: boolean;
   pendingNotify: number;
+  chatLinkMissing: boolean; // 확정자 톡방 링크가 없으면 알림 보내기 전에 알려 준다
 }) {
   const [decideState, decideAction] = useActionState<EventActionState, FormData>(decideApplications, {});
   const [addState, addAction] = useActionState<EventActionState, FormData>(addMemberToEvent, {});
@@ -450,7 +452,12 @@ export function SelectionBoard({
             </p>
             <input type="hidden" name="eventId" value={eventId} />
             <div className="flex flex-wrap items-center gap-3">
-              <SubmitButton pendingText="보내는 중…">알림 보내기 ({pendingNotify}명)</SubmitButton>
+              <SubmitButton
+                pendingText="보내는 중…"
+                confirmText={`${pendingNotify}명에게 선발 결과(확정·미선발)를 알릴까요?${chatLinkMissing ? "\n\n확정자 톡방 링크가 아직 없어요. 확정자에게는 '톡방 링크는 대표님이 등록하면 보여요'로 보여요." : ""}\n\n보낸 알림은 되돌릴 수 없어요.`}
+              >
+                알림 보내기 ({pendingNotify}명)
+              </SubmitButton>
               <Message state={notifyState} />
             </div>
           </form>

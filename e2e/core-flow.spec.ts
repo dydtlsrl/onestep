@@ -119,11 +119,11 @@ test("대표와 회원이 일정 하나를 가입부터 지급까지 처리한�
 
   await test.step("대표: 출석 확인", async () => {
     await admin.goto(`${eventPath}?tab=attendance`);
-    const row = admin.locator("form").filter({ hasText: memberName }).first();
-    await row.getByText("참석", { exact: true }).click();
-    await row.getByRole("button", { name: "저장" }).click();
-    // 저장되면 바뀐 것이 없어져 "저장" 버튼이 다시 꺼진다
-    await expect(row.getByRole("button", { name: "저장" })).toBeDisabled();
+    await admin.getByRole("group", { name: `${memberName} 출석` }).getByRole("button", { name: "참석" }).click();
+    await admin.getByRole("button", { name: "1명 출석 저장" }).click();
+    // 저장되면 바꾼 것이 없어지고 결과가 남는다
+    await expect(admin.getByRole("button", { name: "바꾼 것 없음" })).toBeVisible();
+    await expect(admin.getByRole("status").filter({ hasText: "1명 저장했어요." })).toBeVisible();
   });
 
   await test.step("대표: 계약서 보내기", async () => {

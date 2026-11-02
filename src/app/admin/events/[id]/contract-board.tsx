@@ -48,7 +48,7 @@ function VoidForm({ eventId, contractId }: { eventId: string; contractId: string
         <input type="hidden" name="eventId" value={eventId} />
         <input type="hidden" name="contractId" value={contractId} />
         <input name="reason" required maxLength={300} placeholder="이유 (예: 금액 수정)" aria-label="무효 이유" className="h-10 w-48 max-w-full rounded-lg border border-field px-3 text-sm" />
-        <SubmitButton variant="secondary" pendingText="처리 중…" className="h-10">
+        <SubmitButton variant="secondary" pendingText="처리 중…" className="h-10" confirmText="이 계약서를 무효로 할까요? 되돌릴 수 없어요. 필요하면 다시 보낼 수 있어요.">
           무효
         </SubmitButton>
         <Result state={state} />
@@ -73,7 +73,19 @@ function SendOne({ eventId, memberId, disabled }: { eventId: string; memberId: s
 
 // 일정 상세의 "계약" 탭: 확정자에게 계약서 보내기, 서명 현황, 다시 알림, 무효
 // 계약서는 일정이 끝난 뒤, 출석 확인을 모두 마치고 보낸다 (출석 → 계약서 → 정산, 결정 #9·#34)
-export function ContractBoard({ eventId, rows, canSend, ended }: { eventId: string; rows: ContractRow[]; canSend: boolean; ended: boolean }) {
+export function ContractBoard({
+  eventId,
+  rows,
+  canSend,
+  ended,
+  companyMissing,
+}: {
+  eventId: string;
+  rows: ContractRow[];
+  canSend: boolean;
+  ended: boolean;
+  companyMissing: boolean; // 회사 정보(대표자·연락처)가 비면 계약서 사업주 칸이 빈다
+}) {
   const [sendState, sendAction] = useActionState<SettleState, FormData>(requestContracts, {});
   const [remindState, remindAction] = useActionState<SettleState, FormData>(remindContracts, {});
   const unsent = rows.filter((r) => (!r.contract || r.contract.status === "voided") && r.workedDays > 0);
@@ -108,6 +120,14 @@ export function ContractBoard({ eventId, rows, canSend, ended }: { eventId: stri
         <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm leading-relaxed text-warn">
           출석을 확인하지 않은 사람이 {unchecked.length}명 있어요 ({unchecked.map((r) => r.name).join(", ")}). 출석 확인 탭에서 먼저 끝내 주세요. 계약서에는 일한 날과
           금액이 들어가요.
+        </p>
+      )}
+      {canSend && companyMissing && (
+        <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm leading-relaxed text-warn">
+          회사 정보(대표자·연락처)가 비어 있어 계약서의 사업주 칸이 비어요.{" "}
+          <Link href="/admin/settings" className="font-bold underline underline-offset-4">
+            설정에서 먼저 넣기
+          </Link>
         </p>
       )}
       {noWork.length > 0 && <p className="text-[13px] text-muted">일한 날이 없는 {noWork.length}명(노쇼)에게는 계약서를 보내지 않아요.</p>}

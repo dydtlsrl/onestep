@@ -9,14 +9,19 @@ export function SubmitButton({
   variant = "primary",
   className = "",
   disabled = false,
+  pending: pendingProp = false,
+  confirmText,
 }: {
   children: React.ReactNode;
   pendingText?: string;
   variant?: "primary" | "secondary";
   className?: string;
   disabled?: boolean;
+  pending?: boolean; // onSubmit으로 보내는 폼(keepValuesOnSubmit)은 useFormStatus가 모르므로 직접 넘긴다
+  confirmText?: string; // 되돌릴 수 없는 일: 누르면 한 번 더 묻는다
 }) {
-  const { pending } = useFormStatus();
+  const status = useFormStatus();
+  const pending = status.pending || pendingProp;
   const look =
     variant === "primary"
       ? "bg-brand text-white hover:bg-brand-strong disabled:bg-line disabled:text-muted"
@@ -25,6 +30,9 @@ export function SubmitButton({
     <button
       type="submit"
       disabled={pending || disabled}
+      onClick={(e) => {
+        if (confirmText && !window.confirm(confirmText)) e.preventDefault();
+      }}
       className={`h-11 rounded-lg px-4 text-sm font-bold transition-colors ${look} ${className}`}
     >
       {pending ? pendingText : children}
