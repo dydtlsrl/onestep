@@ -22,6 +22,7 @@ import {
   type Attendance,
   type DayRow,
   type EventRow,
+  type EventStatus,
   type ExtraRuleRow,
 } from "@/lib/events";
 import { formatDate, formatDateTime, formatWon } from "@/lib/format";
@@ -31,6 +32,7 @@ import { EventForm } from "../event-form";
 import { eventToFormValues, type SavedEvent } from "../event-form-values";
 import { loadRolesAndRules } from "../load";
 import { loadSettlement } from "@/lib/settlement-load";
+import { eventProgress, TASK_TEXT, type DashContract, type DashPayment, type EventTask, type TaskKind } from "@/lib/dashboard";
 import { AttendanceBoard, type AttendanceDay, type PersonTotal } from "./attendance-board";
 import { ContractBoard, type ContractRow } from "./contract-board";
 import { PaymentBoard, type PaymentRow, type SavedPayment } from "./payment-board";
@@ -57,7 +59,7 @@ interface AppRow {
   notified_status: ApplicationStatus | null;
   role_name: string;
   rate_override: number | null;
-  member: { name: string; tier: MemberTier; default_rate: number | null } | null;
+  member: { name: string; phone: string; tier: MemberTier; default_rate: number | null } | null;
 }
 
 // 신청자가 많을 때 주소가 너무 길어지지 않게 나눠서 불러온다
@@ -87,7 +89,7 @@ async function loadEvent(supabase: Supabase, id: string) {
     supabase
       .from("applications")
       .select(
-        "id, member_id, day_id, status, added_by_admin, attendance, overtime_minutes, applied_at, notified_status, role_name, rate_override, member:profiles!applications_member_id_fkey(name, tier, default_rate)",
+        "id, member_id, day_id, status, added_by_admin, attendance, overtime_minutes, applied_at, notified_status, role_name, rate_override, member:profiles!applications_member_id_fkey(name, phone, tier, default_rate)",
       )
       .eq("event_id", id)
       .order("applied_at")
@@ -196,9 +198,14 @@ interface PaymentDbRow {
   payment_items: { kind: PaymentRow["computed"]["items"][number]["kind"]; label: string; amount: number; day_id: string | null; sort_order: number }[];
 }
 
+// 화면을 만드는 순간의 한국 날짜
+function todayNow(): string {
+  return todayKst(Date.now());
+}
+
 // 계약서는 일정이 끝난 뒤(마지막 날부터) 보낸다 (결정 #34)
 function eventEnded(endDate: string): boolean {
-  return todayKst(Date.now()) >= endDate;
+  return todayNow() >= endDate;
 }
 
 // "계약"·"정산" 탭: 확정자별 계약 현황과 정산
@@ -244,7 +251,7 @@ async function settleTab(supabase: Supabase, event: EventRow, tab: "contracts" |
         contract: c ? { id: c.id, status: c.status, requestedAt: c.requested_at, signedAt: c.signed_at } : null,
       };
     });
-    return <ContractBoard eventId={event.id} rows={rows} canSend={canAct} ended={eventEnded(event.end_date)} />;
+    return <ContractBoard eventId={event.id} rows={rows} canSend={canAct} ended={eventEnded(event.end_date)} companyMissing={!s?.company.ceo || !s.company.phone} />;
   }
 
   const { data } = await paymentsQuery!;
@@ -317,21 +324,60 @@ function EventSummary({ event, internal, chatLink, days, extras }: EventData) {
   );
 }
 
+// 지금 이 일정에서 할 일 하나를 위에 크게 보여 준다
+function NextStep({ eventId, status, ended, next }: { eventId: string; status: EventStatus; ended: boolean; next: EventTask | undefined }) {
+  if (status === "cancelled") return null;
+  if (status === "draft")
+    return <p className="rounded-xl bg-ground px-4 py-3 text-sm text-body">아직 공개 전이에요. 위의 공개 버튼을 누르면 회원이 신청할 수 있어요.</p>;
+  if (next)
+    return (
+      <Link
+        href={`/admin/events/${eventId}?tab=${TASK_TEXT[next.kind].tab}`}
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border-2 border-warn/50 bg-warn-soft px-4 py-3 hover:border-warn"
+      >
+        <span className="flex min-w-0 flex-[1_1_220px] flex-col">
+          <span className="text-[13px] font-bold text-warn">다음 할 일</span>
+          <span className="font-bold text-ink">{TASK_TEXT[next.kind].label(next.count)}</span>
+        </span>
+        <span className="flex h-11 items-center rounded-lg bg-warn px-4 text-sm font-bold text-white">{TASK_TEXT[next.kind].action} →</span>
+      </Link>
+    );
+  return (
+    <p className="rounded-xl bg-brand-soft px-4 py-3 text-sm text-brand-strong">
+      {ended ? "지금 이 일정에서 할 일이 없어요." : "일정이 끝나면(마지막 날부터) ② 출석 → ③ 계약 → ④ 정산 순서로 진행해요."}
+    </p>
+  );
+}
+
 // 일정 상세: 공개 상태 바꾸기, 신청자 선발·역할·단가, 출석 확인, 일정 정보 수정
 export default async function EventDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; day?: string }>;
 }) {
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) notFound();
-  const requested = (await searchParams).tab;
+  const query = await searchParams;
+  const requested = query.tab;
+  const requestedDay = z.uuid().safeParse(query.day).success ? (query.day as string) : null;
 
   const { supabase } = await requireAdmin();
-  const { event, internal, chatLink, days, extras, apps } = await loadEvent(supabase, id);
+  const [{ event, internal, chatLink, days, extras, apps }, { data: contractRows }, { data: paymentRows }] = await Promise.all([
+    loadEvent(supabase, id),
+    supabase.from("contracts").select("event_id, member_id, status").eq("event_id", id).returns<DashContract[]>(),
+    supabase.from("payments").select("event_id, member_id, status, pay_date, net").eq("event_id", id).returns<DashPayment[]>(),
+  ]);
   if (!event) notFound();
+  const progress = eventProgress(
+    { ...event, days },
+    apps.map((a) => ({ ...a, event_id: event.id })),
+    contractRows ?? [],
+    paymentRows ?? [],
+    todayNow(),
+  );
+  const taskCount = (...kinds: TaskKind[]) => progress.tasks.filter((t) => kinds.includes(t.kind)).reduce((n, t) => n + t.count, 0);
   const data: EventData = { event, internal, chatLink, days, extras };
 
   const status = event.status;
@@ -343,17 +389,19 @@ export default async function EventDetailPage({
   const dayOrder = new Map(days.map((d, i) => [d.id, i]));
   const selected = apps.filter((a) => a.status === "selected");
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "applicants", label: `신청자·선발 ${new Set(apps.filter((a) => a.status !== "cancelled").map((a) => a.member_id)).size}명` },
+  // 단계 순서대로 번호를 붙이고, 할 일이 남은 단계에는 사람 수를 표시한다 (선발 → 출석 → 계약 → 정산)
+  const tabs: { key: Tab; label: string; todo: number }[] = [
+    { key: "applicants", label: `① 신청자·선발 ${new Set(apps.filter((a) => a.status !== "cancelled").map((a) => a.member_id)).size}명`, todo: taskCount("notify") },
     ...(showAttendance
       ? [
-          { key: "attendance" as const, label: `출석 확인 ${new Set(selected.map((a) => a.member_id)).size}명` },
-          { key: "contracts" as const, label: "계약" },
-          { key: "payments" as const, label: "정산" },
+          { key: "attendance" as const, label: `② 출석 ${new Set(selected.map((a) => a.member_id)).size}명`, todo: taskCount("attendance") },
+          { key: "contracts" as const, label: "③ 계약", todo: taskCount("contract", "sign") },
+          { key: "payments" as const, label: "④ 정산", todo: taskCount("settle") },
         ]
       : []),
-    { key: "info", label: "일정 정보" },
+    { key: "info", label: "일정 정보", todo: 0 },
   ];
+  const next = progress.tasks[0];
 
   let body: React.ReactNode = null;
   if (tab === "applicants") {
@@ -419,6 +467,7 @@ export default async function EventDetailPage({
           editable={!locked}
           canAdd={canAdd}
           pendingNotify={pendingNotify}
+          chatLinkMissing={!chatLink}
         />
       </>
     );
@@ -438,6 +487,7 @@ export default async function EventDetailPage({
           return {
             id: a.id,
             name: a.member?.name ?? "(알 수 없음)",
+            phone: a.member?.phone ?? "",
             tier,
             roleName: a.role_name,
             rateText: text,
@@ -452,7 +502,13 @@ export default async function EventDetailPage({
       status === "cancelled" ? (
         <p className="rounded-xl border border-line bg-white p-8 text-center text-muted">취소된 일정이라 출석을 확인할 수 없어요.</p>
       ) : (
-        <AttendanceBoard eventId={event.id} days={attendanceDays} rules={rules} totals={personTotals(apps, days, extras, rules)} />
+        <AttendanceBoard
+          eventId={event.id}
+          days={attendanceDays}
+          rules={rules}
+          totals={personTotals(apps, days, extras, rules)}
+          initialDayId={requestedDay ?? progress.todayDayId ?? days.find((d) => selected.some((a) => a.day_id === d.id && a.attendance === "unknown"))?.id ?? null}
+        />
       );
   } else if (tab === "contracts" || tab === "payments") {
     body = await settleTab(supabase, event, tab);
@@ -521,15 +577,23 @@ export default async function EventDetailPage({
         </Link>
       </header>
 
+      <NextStep eventId={event.id} status={status} ended={progress.ended} next={next} />
+
       <nav aria-label="일정 상세 메뉴" className="flex gap-1 overflow-x-auto border-b border-line">
         {tabs.map((t) => (
           <Link
             key={t.key}
             href={t.key === "applicants" ? `/admin/events/${event.id}` : `/admin/events/${event.id}?tab=${t.key}`}
             aria-current={tab === t.key ? "page" : undefined}
-            className={`-mb-px whitespace-nowrap border-b-[3px] px-4 py-3 text-[15px] ${tab === t.key ? "border-brand font-bold text-ink" : "border-transparent text-muted"}`}
+            className={`relative -mb-px flex items-center gap-1.5 whitespace-nowrap border-b-[3px] px-3 py-3 text-[15px] sm:px-4 ${tab === t.key ? "border-brand font-bold text-ink" : "border-transparent text-muted"}`}
           >
             {t.label}
+            {t.todo > 0 && (
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-warn px-1.5 text-xs font-bold text-white">
+                {t.todo}
+                <span className="sr-only">명 할 일</span>
+              </span>
+            )}
           </Link>
         ))}
       </nav>

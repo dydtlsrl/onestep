@@ -199,7 +199,12 @@ export function PersonalLink({ rosterId, name, phone, existing }: { rosterId: st
 export function RemoveRowButton({ rosterId, name }: { rosterId: string; name: string }) {
   const [state, action] = useActionState<RosterState, FormData>(removeRosterRows, {});
   return (
-    <form action={action}>
+    <form
+      action={action}
+      onSubmit={(e) => {
+        if (!window.confirm(`${name}님을 명단에서 지울까요? 이 사람의 개인 링크도 꺼져요.`)) e.preventDefault();
+      }}
+    >
       <input type="hidden" name="rosterId" value={rosterId} />
       <button type="submit" aria-label={`${name} 명단에서 지우기`} className="h-9 rounded-md px-2 text-[13px] text-muted underline underline-offset-4 hover:text-ink">
         지우기

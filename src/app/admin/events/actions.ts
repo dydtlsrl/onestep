@@ -143,22 +143,39 @@ export async function notifyResults(_prev: EventActionState, formData: FormData)
   return { ok: data ? `${data}명에게 알림을 보냈어요.` : "새로 알릴 사람이 없어요." };
 }
 
-export async function saveAttendance(_prev: EventActionState, formData: FormData): Promise<EventActionState> {
+const attendanceRowSchema = z.object({
+  applicationId: z.uuid(),
+  attendance: z.enum(["unknown", "attended", "late", "no_show"]),
+  overtimeMinutes: z.number().int().min(0, "초과 시간은 0~1440분으로 적어 주세요.").max(1440, "초과 시간은 0~1440분으로 적어 주세요."),
+});
+
+// 한 날짜의 출석을 한 번에 저장한다 (현장에서 휴대폰으로 "모두 참석" → 노쇼만 바꾸고 저장)
+export async function saveAttendanceBatch(_prev: EventActionState, formData: FormData): Promise<EventActionState> {
   const eventId = z.uuid().safeParse(formData.get("eventId"));
-  const appId = z.uuid().safeParse(formData.get("applicationId"));
-  const attendance = z.enum(["unknown", "attended", "late", "no_show"]).safeParse(formData.get("attendance"));
-  const minutes = z.coerce.number().int().min(0).max(1440).safeParse(formData.get("overtimeMinutes") || "0");
-  if (!eventId.success || !appId.success || !attendance.success) return { error: "잘못된 요청이에요." };
-  if (!minutes.success) return { error: "초과 시간은 0~1440분으로 적어 주세요." };
+  if (!eventId.success) return { error: "잘못된 요청이에요." };
+  let raw: unknown;
+  try {
+    raw = JSON.parse(String(formData.get("rows") ?? "[]"));
+  } catch {
+    return { error: "잘못된 요청이에요." };
+  }
+  const rows = z.array(attendanceRowSchema).min(1, "바꾼 사람이 없어요.").max(500).safeParse(raw);
+  if (!rows.success) return { error: rows.error.issues[0]?.message ?? "입력한 내용을 다시 확인해 주세요." };
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("set_attendance", {
-    p_application_id: appId.data,
-    p_attendance: attendance.data,
-    p_overtime_minutes: minutes.data,
-  });
-  if (error) return { error: await actionError(error) };
-
+  let done = 0;
+  for (const row of rows.data) {
+    const { error } = await supabase.rpc("set_attendance", {
+      p_application_id: row.applicationId,
+      p_attendance: row.attendance,
+      p_overtime_minutes: row.attendance === "attended" || row.attendance === "late" ? row.overtimeMinutes : 0,
+    });
+    if (error) {
+      refresh(eventId.data);
+      return { error: `${done}명 저장한 뒤 멈췄어요: ${await actionError(error)}` };
+    }
+    done += 1;
+  }
   refresh(eventId.data);
-  return { ok: "저장" };
+  return { ok: `${done}명 저장했어요.` };
 }

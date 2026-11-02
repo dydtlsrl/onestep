@@ -69,7 +69,13 @@ export function StatusActions({ eventId, status }: { eventId: string; status: Ev
         )}
       </div>
       {cancelling && canCancel && (
-        <form action={action} className="flex flex-wrap items-end gap-2 rounded-lg bg-warn-soft p-3">
+        <form
+          action={action}
+          onSubmit={(e) => {
+            if (!window.confirm("일정을 취소할까요?\n\n신청자 모두에게 취소 알림이 가고, 서명 전 계약서는 무효가 돼요. 되돌릴 수 없어요.")) e.preventDefault();
+          }}
+          className="flex flex-wrap items-end gap-2 rounded-lg bg-warn-soft p-3"
+        >
           <input type="hidden" name="eventId" value={eventId} />
           <input type="hidden" name="status" value="cancelled" />
           <div className="flex flex-[1_1_260px] flex-col gap-1.5">

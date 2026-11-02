@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { keepValuesOnSubmit } from "@/components/keep-values";
 import { SubmitButton } from "@/components/submit-button";
 import { DAY_KIND_LABEL, EVENT_TYPE_LABEL, formatShortDate, scheduledMinutes, suggestPayDate, type DayKind, type EventType } from "@/lib/events";
 import { formatWon } from "@/lib/format";
@@ -80,7 +81,7 @@ export function EventForm({
   rules: PayRules;
   lockedDayIds?: string[];
 }) {
-  const [state, action] = useActionState<EventActionState, FormData>(mode === "create" ? createEvent : updateEvent, {});
+  const [state, action, pending] = useActionState<EventActionState, FormData>(mode === "create" ? createEvent : updateEvent, {});
   const [days, setDays] = useState<DayDraft[]>(initial.days);
   // 저장한 뒤 서버에서 새 날짜 id가 오면 목록을 서버 값으로 맞춘다 (같은 날짜가 두 번 추가되지 않게)
   const initialKey = JSON.stringify(initial.days);
@@ -169,7 +170,8 @@ export function EventForm({
   );
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    // 저장에 실패해도 적은 내용이 지워지지 않게 onSubmit으로 보낸다
+    <form onSubmit={keepValuesOnSubmit(action)} className="flex flex-col gap-4">
       {eventId && <input type="hidden" name="eventId" value={eventId} />}
       <input type="hidden" name="days" value={serialized} />
 
@@ -445,7 +447,7 @@ export function EventForm({
       </Section>
 
       <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton pendingText="저장 중…" className="h-12 px-6 text-[15px]">
+        <SubmitButton pendingText="저장 중…" pending={pending} className="h-12 px-6 text-[15px]">
           {mode === "create" ? "임시저장으로 만들기" : "일정 정보 저장"}
         </SubmitButton>
         {mode === "create" && <span className="text-[13px] text-muted">만든 뒤 상세 화면에서 공개해요. 공개 전에는 회원에게 보이지 않아요.</span>}
