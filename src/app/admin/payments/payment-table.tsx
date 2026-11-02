@@ -71,8 +71,11 @@ export function PaymentTable({ rows }: { rows: PayRow[] }) {
     if (!result.error) setChecked(new Set());
     return result;
   }, {});
+  // 지급 완료로 바뀌는 것은 "지급 예정"인 줄뿐이다. 확인 창에는 그 인원·합계만 보여 준다.
   const checkedRows = rows.filter((r) => checked.has(r.id));
-  const checkedNet = checkedRows.reduce((sum, r) => sum + r.net, 0);
+  const payable = checkedRows.filter((r) => r.status === "scheduled");
+  const payableNet = payable.reduce((sum, r) => sum + r.net, 0);
+  const notPayable = checkedRows.length - payable.length;
   const selectable = rows.filter((r) => r.status !== "paid" && r.status !== "cancelled");
   const allChecked = selectable.length > 0 && selectable.every((r) => checked.has(r.id));
   const toggle = (id: string) =>
@@ -155,9 +158,9 @@ export function PaymentTable({ rows }: { rows: PayRow[] }) {
         <span className="ml-auto">
           <StatusButton
             status="paid"
-            disabled={checked.size === 0}
+            disabled={payable.length === 0}
             primary
-            confirmText={`${checkedRows.length}명, 실지급 합계 ${formatWon(checkedNet)}을(를) 지급 완료로 바꿀까요?\n\n되돌릴 수 없고, 회원에게 지급 알림이 가요. 은행 이체를 마친 뒤에 눌러 주세요.`}
+            confirmText={`지급 예정 ${payable.length}명, 실지급 합계 ${formatWon(payableNet)}을(를) 지급 완료로 바꿀까요?${notPayable > 0 ? `\n(고른 것 중 확정 전·보류 ${notPayable}명은 바뀌지 않아요)` : ""}\n\n되돌릴 수 없고, 회원에게 지급 알림이 가요. 은행 이체를 마친 뒤에 눌러 주세요.`}
           >
             지급 완료로 바꾸기
           </StatusButton>
