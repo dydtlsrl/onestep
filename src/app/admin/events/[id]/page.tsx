@@ -343,7 +343,7 @@ function NextStep({ eventId, status, ended, next }: { eventId: string; status: E
       </Link>
     );
   return (
-    <p className="rounded-xl bg-brand-soft px-4 py-3 text-sm text-brand-strong">
+    <p className="text-sm text-muted">
       {ended ? "지금 이 일정에서 할 일이 없어요." : "일정이 끝나면(마지막 날부터) ② 출석 → ③ 계약 → ④ 정산 순서로 진행해요."}
     </p>
   );
@@ -535,57 +535,61 @@ export default async function EventDetailPage({
         ← 일정 목록
       </Link>
 
-      <header className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${STATUS_BADGE[status]}`}>{EVENT_STATUS_LABEL[status]}</span>
-          <span className="text-sm text-muted">{EVENT_TYPE_LABEL[event.type]}</span>
-          {internal?.client_name && <span className="text-sm text-muted">· {internal.client_name}</span>}
+      <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between md:gap-8">
+        <div className="flex min-w-0 flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-md px-2 py-0.5 text-xs font-bold ${STATUS_BADGE[status]}`}>{EVENT_STATUS_LABEL[status]}</span>
+            <span className="text-sm text-muted">{EVENT_TYPE_LABEL[event.type]}</span>
+            {internal?.client_name && <span className="text-sm text-muted">· {internal.client_name}</span>}
+          </div>
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{event.title}</h1>
+          <p className="text-[15px] text-body">
+            {formatEventRange(event.start_date, event.end_date)}
+            {event.location_name && ` · ${event.location_name}`}
+            {days.length > 1 && event.all_days_required && " · 모든 날짜 참여 필수"}
+          </p>
+          <ul className="flex flex-col gap-1 text-sm text-body">
+            {days.map((d) => {
+              const count = selected.filter((a) => a.day_id === d.id).length;
+              return (
+                <li key={d.id} className="flex flex-wrap gap-x-2">
+                  <span className="font-bold">{dayLabel(d)}</span>
+                  <span>
+                    {d.gather_time && `집합 ${formatTime(d.gather_time)} · `}
+                    {formatTime(d.start_time)}–{formatTime(d.end_time)}
+                  </span>
+                  <span className="text-muted">
+                    · {rateLabel(toRoleRate(d))} · 확정 <strong className="text-ink">{count}</strong> / {d.headcount}명
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          {event.apply_deadline && <p className="text-sm text-muted">신청 마감 {formatDateTime(event.apply_deadline)}</p>}
+          {status === "cancelled" && event.cancel_reason && (
+            <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">취소 사유: {event.cancel_reason}</p>
+          )}
         </div>
-        <h1 className="text-2xl font-bold tracking-tight">{event.title}</h1>
-        <p className="text-[15px] text-body">
-          {formatEventRange(event.start_date, event.end_date)}
-          {event.location_name && ` · ${event.location_name}`}
-          {days.length > 1 && event.all_days_required && " · 모든 날짜 참여 필수"}
-        </p>
-        <ul className="flex flex-col gap-1 text-sm text-body">
-          {days.map((d) => {
-            const count = selected.filter((a) => a.day_id === d.id).length;
-            return (
-              <li key={d.id} className="flex flex-wrap gap-x-2">
-                <span className="font-bold">{dayLabel(d)}</span>
-                <span>
-                  {d.gather_time && `집합 ${formatTime(d.gather_time)} · `}
-                  {formatTime(d.start_time)}–{formatTime(d.end_time)}
-                </span>
-                <span className="text-muted">
-                  · {rateLabel(toRoleRate(d))} · 확정 <strong className="text-ink">{count}</strong> / {d.headcount}명
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-        {event.apply_deadline && <p className="text-sm text-muted">신청 마감 {formatDateTime(event.apply_deadline)}</p>}
-        {status === "cancelled" && event.cancel_reason && (
-          <p className="rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">취소 사유: {event.cancel_reason}</p>
-        )}
-        <StatusActions eventId={event.id} status={status} />
-        <Link
-          href={`/admin/events/new?copy=${event.id}`}
-          className="inline-flex min-h-10 items-center self-start text-sm text-brand underline underline-offset-4 hover:text-brand-strong"
-        >
-          이 일정 복사해서 새로 만들기 (날짜만 바꾸기)
-        </Link>
+        <div className="flex shrink-0 flex-col gap-1 md:items-end">
+          <StatusActions eventId={event.id} status={status} />
+          <Link
+            href={`/admin/events/new?copy=${event.id}`}
+            className="inline-flex min-h-10 items-center self-start text-sm text-brand-strong underline-offset-4 hover:underline md:self-end"
+          >
+            이 일정 복사해서 새로 만들기
+          </Link>
+        </div>
       </header>
 
       <NextStep eventId={event.id} status={status} ended={progress.ended} next={next} />
 
-      <nav aria-label="일정 상세 메뉴" className="flex gap-1 overflow-x-auto border-b border-line">
+      <nav aria-label="일정 상세 메뉴" className="-mx-4 flex gap-0.5 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0">
         {tabs.map((t) => (
           <Link
             key={t.key}
             href={t.key === "applicants" ? `/admin/events/${event.id}` : `/admin/events/${event.id}?tab=${t.key}`}
             aria-current={tab === t.key ? "page" : undefined}
-            className={`relative -mb-px flex items-center gap-1.5 whitespace-nowrap border-b-[3px] px-3 py-3 text-[15px] sm:px-4 ${tab === t.key ? "border-brand font-bold text-ink" : "border-transparent text-muted"}`}
+            className={`relative -mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-[3px] px-2.5 py-3 text-sm sm:px-4 sm:text-[15px] ${tab === t.key ? "border-brand font-bold text-ink" : "border-transparent text-muted"}`}
           >
             {t.label}
             {t.todo > 0 && (

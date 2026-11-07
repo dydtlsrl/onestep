@@ -26,7 +26,7 @@ export default async function NotificationsPage() {
   const unread = items.filter((n) => !n.read_at).length;
 
   return (
-    <PageShell>
+    <PageShell nav>
       <Link href="/" className="-mt-3 inline-flex min-h-10 items-center self-start text-sm text-muted underline-offset-4 hover:underline">
         ← 처음 화면
       </Link>

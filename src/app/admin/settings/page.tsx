@@ -37,14 +37,14 @@ export default async function SettingsPage() {
   const keyReady = hasPiiKey();
 
   return (
-    <>
+    <div className="flex w-full max-w-3xl flex-col gap-5">
       <h1 className="text-2xl font-bold tracking-tight">설정</h1>
 
-      <div className={`rounded-lg px-4 py-3 text-sm leading-relaxed ${keyReady ? "bg-brand-soft text-brand-strong" : "bg-warn-soft text-warn"}`}>
-        {keyReady
-          ? "개인정보 암호화 키가 설정되어 있어요. 회원이 주민번호·계좌를 등록할 수 있어요."
-          : "개인정보 암호화 키(PII_ENCRYPTION_KEY)가 없어요. README의 '암호화 키 만들기'를 따라 설정해야 회원이 주민번호·계좌를 등록할 수 있어요."}
-      </div>
+      {!keyReady && (
+        <div className="rounded-lg bg-warn-soft px-4 py-3 text-sm leading-relaxed text-warn">
+          개인정보 암호화 키(PII_ENCRYPTION_KEY)가 없어요. README의 &lsquo;암호화 키 만들기&rsquo;를 따라 설정해야 회원이 주민번호·계좌를 등록할 수 있어요.
+        </div>
+      )}
       {tax.type === "unset" && (
         <div className="rounded-lg bg-warn-soft px-4 py-3 text-sm leading-relaxed text-warn">
           세금 처리 방식이 아직 정해지지 않았어요. 지금은 정산이 &ldquo;확정 전&rdquo;으로만 저장돼요. 현재: {TAX_TYPE_LABEL[tax.type]}
@@ -60,6 +60,6 @@ export default async function SettingsPage() {
       <Section title="계약서" meta={meta("contract")}>
         <ContractSettingForm display={parseRrnDisplay(byKey.get("contract")?.value)} />
       </Section>
-    </>
+    </div>
   );
 }

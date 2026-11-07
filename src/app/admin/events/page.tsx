@@ -51,13 +51,13 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
   await reportLoadError("/admin/events", error);
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-1">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
           <h1 className="text-2xl font-bold tracking-tight">일정</h1>
           <p className="text-sm text-muted">일정을 만들고, 핵심 인력에게 먼저 공개하고, 신청자를 선발해요.</p>
         </div>
-        <Link href="/admin/events/new" className="flex h-11 items-center rounded-lg bg-brand px-4 text-sm font-bold text-white hover:bg-brand-strong">
-          새 일정
+        <Link href="/admin/events/new" className="flex h-11 shrink-0 items-center rounded-lg bg-brand px-4 text-sm font-bold text-white hover:bg-brand-strong">
+          + 새 일정
         </Link>
       </div>
 

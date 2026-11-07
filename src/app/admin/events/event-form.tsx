@@ -446,11 +446,12 @@ export function EventForm({
         </Field>
       </Section>
 
-      <div className="flex flex-wrap items-center gap-3">
+      {/* 폼이 길어서 저장 버튼을 화면 아래에 붙여 둔다 (휴대폰에서는 아래 탭 메뉴 바로 위) */}
+      <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 -mx-4 flex flex-wrap items-center gap-3 border-t border-line bg-ground/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 md:bottom-0 md:mx-0 md:rounded-t-xl md:border-x md:bg-white/95 md:px-5">
         <SubmitButton pendingText="저장 중…" pending={pending} className="h-12 px-6 text-[15px]">
           {mode === "create" ? "임시저장으로 만들기" : "일정 정보 저장"}
         </SubmitButton>
-        {mode === "create" && <span className="text-[13px] text-muted">만든 뒤 상세 화면에서 공개해요. 공개 전에는 회원에게 보이지 않아요.</span>}
+        {mode === "create" && <span className="hidden text-[13px] text-muted sm:inline">만든 뒤 상세 화면에서 공개해요. 공개 전에는 회원에게 보이지 않아요.</span>}
         {state.error && (
           <p role="alert" className="text-sm font-bold text-warn">
             {state.error}

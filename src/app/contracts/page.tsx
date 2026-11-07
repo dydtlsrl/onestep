@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NotificationBell } from "@/components/notification-bell";
 import { PageShell } from "@/components/page-shell";
 import { requireMember } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
@@ -31,10 +32,7 @@ export default async function MyContractsPage() {
   const rows = data ?? [];
 
   return (
-    <PageShell>
-      <Link href="/" className="-mt-3 inline-flex min-h-10 items-center self-start text-sm text-muted underline-offset-4 hover:underline">
-        ← 처음 화면
-      </Link>
+    <PageShell actions={<NotificationBell />} nav>
       <h1 className="text-xl font-bold">내 계약서</h1>
       {rows.length === 0 ? (
         <p className="rounded-xl border border-line bg-white p-5 text-[15px] text-muted">받은 계약서가 없어요. 일정이 확정되면 대표님이 계약서를 보내 드려요.</p>

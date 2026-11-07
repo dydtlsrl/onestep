@@ -1,35 +1,26 @@
 import { requireAdmin } from "@/lib/auth";
-import { AdminNav } from "./admin-nav";
+import { AdminSidebar, AdminTabBar } from "./admin-nav";
 import { getPendingCount } from "./pending-count";
 
-// 대표 화면의 공통 틀: 왼쪽 메뉴 + 오른쪽 내용 (휴대폰에서는 메뉴가 위로 올라간다)
+// 대표 화면의 공통 틀
+// - 컴퓨터: 왼쪽 메뉴 + 오른쪽 내용. 내용은 가운데에 최대 1024px로 둬서 넓은 화면에서도 한눈에 읽히게 한다
+// - 휴대폰: 위에 작은 머리글, 아래에 탭 메뉴 (내용이 탭에 가리지 않게 아래 여백을 둔다)
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const [{ profile }, pendingCount] = await Promise.all([requireAdmin(), getPendingCount()]);
 
-  const signOut = (className: string) => (
-    <form action="/auth/signout" method="post" className={className}>
-      <button type="submit" className="min-h-10 text-sm text-[#c9d3e6] underline underline-offset-4 hover:text-white">
-        로그아웃
-      </button>
-    </form>
-  );
-
   return (
-    <div className="flex flex-1 flex-col md:flex-row">
-      <nav aria-label="관리자 메뉴" className="flex flex-col bg-navy text-white md:w-[200px] md:shrink-0 md:gap-4 md:px-3 md:py-5">
-        <div className="flex items-center justify-between gap-3 px-4 py-2 md:px-3 md:py-0">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-lg font-bold tracking-tight">원스텝</span>
-            <span className="text-xs text-[#c9d3e6]">관리자 · {profile.name}</span>
-          </div>
-          {signOut("md:hidden")}
-        </div>
-        <AdminNav pendingCount={pendingCount} />
-        {signOut("mt-auto hidden px-3 md:block")}
-      </nav>
-      <main className="min-w-0 flex-1 px-4 py-6 sm:px-8">
-        <div className="flex max-w-6xl flex-col gap-5">{children}</div>
-      </main>
+    <div className="flex flex-1">
+      <AdminSidebar pendingCount={pendingCount} name={profile.name} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-12 items-center justify-between border-b border-line bg-white px-4 md:hidden">
+          <span className="font-bold tracking-tight">원스텝</span>
+          <span className="text-xs text-muted">관리자 · {profile.name}</span>
+        </header>
+        <main className="flex-1 px-4 pb-[calc(6rem+env(safe-area-inset-bottom))] pt-5 sm:px-6 md:px-10 md:pb-12 md:pt-8">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">{children}</div>
+        </main>
+      </div>
+      <AdminTabBar pendingCount={pendingCount} />
     </div>
   );
 }

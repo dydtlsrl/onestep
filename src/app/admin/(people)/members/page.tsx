@@ -171,7 +171,7 @@ export default async function MembersPage({
                         <span className="text-muted">없음</span>
                       )}
                     </td>
-                    <td data-label="가입 신청일" className="whitespace-nowrap px-4 py-3 text-muted">{formatDate(m.created_at)}</td>
+                    <td data-label="가입 신청일" className="stack-hide whitespace-nowrap px-4 py-3 text-muted">{formatDate(m.created_at)}</td>
                   </tr>
                 );
               })}

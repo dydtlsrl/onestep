@@ -35,8 +35,8 @@ export function StatusActions({ eventId, status }: { eventId: string; status: Ev
   const canCancel = status !== "completed" && status !== "cancelled";
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
+    <div className="flex flex-col gap-2 md:items-end">
+      <div className="flex flex-wrap items-center gap-2 md:justify-end">
         {actions.map((a) => (
           <form
             key={a.to}
@@ -62,7 +62,7 @@ export function StatusActions({ eventId, status }: { eventId: string; status: Ev
             type="button"
             onClick={() => setCancelling((v) => !v)}
             aria-expanded={cancelling}
-            className="h-10 rounded-lg border border-field bg-white px-4 text-sm font-bold text-warn hover:bg-warn-soft"
+            className="h-10 rounded-lg px-3 text-sm text-warn underline-offset-4 hover:underline"
           >
             일정 취소
           </button>

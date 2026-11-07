@@ -196,7 +196,7 @@ export default async function HomePage() {
   ]);
 
   return (
-    <PageShell actions={<NotificationBell />}>
+    <PageShell actions={<NotificationBell />} nav>
       <div className="flex items-center gap-2">
         <h1 className="text-xl font-bold">{profile.name}님, 안녕하세요</h1>
         <span className="rounded-md bg-navy px-2 py-0.5 text-xs font-bold text-white">{TIER_LABEL[profile.tier]}</span>
@@ -281,18 +281,6 @@ export default async function HomePage() {
         )}
       </section>
 
-      <nav aria-label="내 메뉴" className="grid grid-cols-3 gap-2">
-        {[
-          { href: "/contracts", label: "내 계약서" },
-          { href: "/payments", label: "정산 내역" },
-          { href: "/me", label: "내 정보" },
-        ].map((l) => (
-          <Link key={l.href} href={l.href} className="flex h-12 items-center justify-center rounded-lg border border-line bg-white text-sm font-bold text-ink hover:bg-ground">
-            {l.label}
-          </Link>
-        ))}
-      </nav>
-      <SignOutButton />
     </PageShell>
   );
 }

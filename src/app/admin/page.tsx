@@ -102,39 +102,47 @@ function Card({ title, children, tone = "plain" }: { title: string; children: Re
   );
 }
 
+// 처음 할 일: 남은 단계만 크게 보여 주고, 끝낸 단계는 한 줄로 접는다
 function SetupCard({ setup }: { setup: SetupState }) {
-  const done = SETUP_STEPS.filter((s) => setup[s.key]).length;
-  if (done === SETUP_STEPS.length) return null;
+  const done = SETUP_STEPS.filter((s) => setup[s.key]);
+  const left = SETUP_STEPS.filter((s) => !setup[s.key]);
+  if (left.length === 0) return null;
   return (
-    <Card title={`처음 할 일 (${done} / ${SETUP_STEPS.length})`} tone="brand">
-      <ol className="flex flex-col divide-y divide-brand/15">
-        {SETUP_STEPS.map((s, i) => {
-          const ok = setup[s.key];
-          return (
-            <li key={s.key} className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3">
-              <span
-                aria-hidden
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ${ok ? "bg-brand text-white" : "border-2 border-brand text-brand-strong"}`}
-              >
-                {ok ? "✓" : i + 1}
+    <section className="flex flex-col gap-3 rounded-xl border border-line bg-white p-4 sm:p-5">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="text-lg font-bold">처음 할 일</h2>
+          <span className="text-sm text-muted">
+            {done.length} / {SETUP_STEPS.length} 완료
+          </span>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-ground" aria-hidden>
+          <div className="h-full rounded-full bg-brand" style={{ width: `${(done.length / SETUP_STEPS.length) * 100}%` }} />
+        </div>
+      </div>
+      <ol className="flex flex-col divide-y divide-line">
+        {left.map((s) => (
+          <li key={s.key}>
+            <Link href={s.href} className="group flex min-h-14 items-center gap-3 py-3">
+              <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-brand text-[13px] font-bold text-brand-strong">
+                {SETUP_STEPS.indexOf(s) + 1}
               </span>
-              <div className="flex min-w-0 flex-[1_1_200px] flex-col">
-                <span className={`font-bold ${ok ? "text-muted line-through" : ""}`}>
-                  {s.title}
-                  <span className="sr-only">{ok ? " (했어요)" : " (아직)"}</span>
-                </span>
-                {!ok && <span className="text-[13px] text-body">{s.help}</span>}
-              </div>
-              {!ok && (
-                <Link href={s.href} className="flex h-11 items-center rounded-lg bg-brand px-4 text-sm font-bold text-white hover:bg-brand-strong">
-                  하러 가기
-                </Link>
-              )}
-            </li>
-          );
-        })}
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="font-bold group-hover:text-brand-strong">{s.title}</span>
+                <span className="text-[13px] text-body">{s.help}</span>
+              </span>
+              <span className="shrink-0 text-sm font-bold text-brand-strong">하러 가기 →</span>
+            </Link>
+          </li>
+        ))}
       </ol>
-    </Card>
+      {done.length > 0 && (
+        <p className="text-[13px] text-muted">
+          <span aria-hidden>✓ </span>
+          끝낸 일: {done.map((s) => s.title).join(", ")}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -177,13 +185,13 @@ export default async function AdminHomePage() {
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-bold tracking-tight">{profile.name}님, 오늘 할 일</h1>
-          <p className="text-sm text-muted">{formatEventDate(day)} · 누르면 바로 그 화면으로 가요.</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-1">
+          <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{profile.name}님, 오늘 할 일</h1>
+          <p className="text-sm text-muted">{formatEventDate(day)}</p>
         </div>
-        <Link href="/admin/events/new" className="flex h-11 items-center rounded-lg bg-brand px-4 text-sm font-bold text-white hover:bg-brand-strong">
-          새 일정
+        <Link href="/admin/events/new" className="flex h-11 shrink-0 items-center rounded-lg bg-brand px-4 text-sm font-bold text-white hover:bg-brand-strong">
+          + 새 일정
         </Link>
       </div>
 
@@ -192,7 +200,7 @@ export default async function AdminHomePage() {
       <SetupCard setup={setup} />
       <TodayCard events={progress.filter((p) => p.today)} />
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         <Card title="처리할 일">
           {nothing ? (
             <p className="text-sm text-body">지금 처리할 일이 없어요.</p>
@@ -249,10 +257,12 @@ export default async function AdminHomePage() {
               <ul className="flex flex-col divide-y divide-line">
                 {upcoming.map((e) => (
                   <li key={e.id}>
-                    <Link href={`/admin/events/${e.id}`} className="flex min-h-12 flex-wrap items-center gap-x-3 gap-y-1 py-2 hover:bg-ground">
-                      <span className="w-28 shrink-0 text-sm font-bold">{formatEventRange(e.start_date, e.end_date)}</span>
-                      <span className="min-w-0 flex-1 truncate">{e.title}</span>
-                      <span className="text-[13px] text-muted">확정 {e.selected}명</span>
+                    <Link href={`/admin/events/${e.id}`} className="group flex min-h-12 items-center gap-3 py-2.5">
+                      <span className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-center sm:gap-3">
+                        <span className="text-[13px] font-bold sm:w-28 sm:shrink-0 sm:text-sm">{formatEventRange(e.start_date, e.end_date)}</span>
+                        <span className="truncate group-hover:text-brand-strong">{e.title}</span>
+                      </span>
+                      <span className="shrink-0 text-[13px] text-muted">확정 {e.selected}명</span>
                     </Link>
                   </li>
                 ))}
@@ -271,12 +281,12 @@ export default async function AdminHomePage() {
 function TaskRow({ href, title, text, action }: { href: string; title: string; text: string; action: string }) {
   return (
     <li>
-      <Link href={href} className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-1 py-3 hover:bg-ground">
-        <span className="flex min-w-0 flex-[1_1_220px] flex-col">
-          <span className="text-[13px] text-muted">{title}</span>
-          <span className="font-bold">{text}</span>
+      <Link href={href} className="group flex min-h-14 items-center gap-3 py-3">
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-[13px] text-muted">{title}</span>
+          <span className="font-bold group-hover:text-brand-strong">{text}</span>
         </span>
-        <span className="flex h-10 items-center rounded-lg border border-field bg-white px-3 text-sm font-bold text-brand-strong">{action} →</span>
+        <span className="shrink-0 text-sm font-bold text-brand-strong">{action} →</span>
       </Link>
     </li>
   );

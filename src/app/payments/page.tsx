@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { NotificationBell } from "@/components/notification-bell";
 import { PageShell } from "@/components/page-shell";
 import { requireMember } from "@/lib/auth";
 import { formatEventRange } from "@/lib/events";
@@ -43,10 +43,7 @@ export default async function MyPaymentsPage() {
   const upcoming = rows.filter((p) => p.status === "scheduled").reduce((s, p) => s + p.net, 0);
 
   return (
-    <PageShell>
-      <Link href="/" className="-mt-3 inline-flex min-h-10 items-center self-start text-sm text-muted underline-offset-4 hover:underline">
-        ← 처음 화면
-      </Link>
+    <PageShell actions={<NotificationBell />} nav>
       <h1 className="text-xl font-bold">정산 내역</h1>
 
       <dl className="grid grid-cols-2 gap-2">

@@ -2,7 +2,7 @@
 export function SignOutButton() {
   return (
     <form action="/auth/signout" method="post">
-      <button type="submit" className="text-sm text-muted underline underline-offset-4 hover:text-ink">
+      <button type="submit" className="inline-flex min-h-10 items-center text-sm text-muted underline underline-offset-4 hover:text-ink">
         로그아웃
       </button>
     </form>

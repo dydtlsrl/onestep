@@ -21,7 +21,7 @@ export default async function WithdrawPage() {
   const back = profile.status === "active" ? "/me" : "/pending";
 
   return (
-    <PageShell>
+    <PageShell nav>
       <Link href={back} className="-mt-3 inline-flex min-h-10 items-center self-start text-sm text-muted underline-offset-4 hover:underline">
         ← 돌아가기
       </Link>

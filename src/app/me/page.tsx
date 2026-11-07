@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { NotificationBell } from "@/components/notification-bell";
 import { Card, PageShell, PrivacyLink } from "@/components/page-shell";
+import { SignOutButton } from "@/components/sign-out-button";
 import { requireMember, TIER_LABEL } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { formatPhone } from "@/lib/phone";
@@ -15,10 +17,7 @@ export default async function MyInfoPage() {
     .maybeSingle<PrivateSummary & { updated_at: string }>();
 
   return (
-    <PageShell>
-      <Link href="/" className="-mt-3 inline-flex min-h-10 items-center self-start text-sm text-muted underline-offset-4 hover:underline">
-        ← 처음 화면
-      </Link>
+    <PageShell actions={<NotificationBell />} nav>
       <h1 className="text-xl font-bold">내 정보</h1>
 
       <Card>
@@ -58,6 +57,7 @@ export default async function MyInfoPage() {
       </Card>
 
       <div className="flex flex-wrap items-center gap-x-4">
+        <SignOutButton />
         <PrivacyLink />
         {profile.role !== "admin" && (
           <Link href="/withdraw" className="inline-flex min-h-10 items-center text-[13px] text-muted underline underline-offset-4 hover:text-ink">

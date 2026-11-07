@@ -127,7 +127,7 @@ export default async function MemberEventPage({ params }: { params: Promise<{ id
   const initialDays = mine.filter((a) => a.shown === "cancelled").map((a) => a.day_id);
 
   return (
-    <PageShell actions={<NotificationBell />}>
+    <PageShell actions={<NotificationBell />} nav>
       <Link href="/" className="-mt-3 inline-flex min-h-10 items-center self-start text-sm text-muted underline-offset-4 hover:underline">
         ← 일정 목록
       </Link>

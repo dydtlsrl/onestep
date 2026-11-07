@@ -56,14 +56,14 @@ body {
   }
   .stack-table td[data-label] {
     position: relative;
-    padding-left: 5.5rem;
+    padding-left: 4.75rem;
   }
   .stack-table td[data-label]::before {
     content: attr(data-label);
     position: absolute;
     left: 0;
     top: 0.2rem;
-    width: 5rem;
+    width: 4.25rem;
     font-size: 12px;
     color: var(--color-muted);
   }
@@ -83,5 +83,9 @@ body {
   }
   .stack-table td[colspan] {
     padding: 0;
+  }
+  /* 휴대폰 카드에서는 숨기는 칸 (상세 화면에서 볼 수 있는 덜 중요한 값) */
+  .stack-table td.stack-hide {
+    display: none;
   }
 }
