@@ -56,7 +56,7 @@ function RoleFields({
   return (
     <div className="flex flex-col gap-3">
       <fieldset className="flex flex-wrap items-center gap-4">
-        <legend className="mb-2 text-sm font-bold">지급 방식</legend>
+        <legend className="mb-1 text-sm font-bold">지급 방식</legend>
         {(["hourly", "daily"] as const).map((type) => (
           <label key={type} className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">
             <input
@@ -210,7 +210,7 @@ export function RoleItem({ role, rules }: { role: RoleRow; rules: PayRules }) {
     <li className={`flex flex-col gap-3 border-b border-[#eef0f3] py-4 last:border-0 ${role.is_active ? "" : "opacity-60"}`}>
       {!editing ? (
         <div className="flex flex-wrap items-center gap-3">
-          <span className="w-8 text-right text-sm text-muted">{role.sort_order}</span>
+          <span className="hidden w-8 text-right text-sm text-muted sm:inline">{role.sort_order}</span>
           <div className="flex min-w-0 flex-[1_1_220px] flex-col gap-0.5">
             <span className="flex flex-wrap items-center gap-2 font-bold">
               {role.name}

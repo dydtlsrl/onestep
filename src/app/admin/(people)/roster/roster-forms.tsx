@@ -48,7 +48,7 @@ export function RosterImport({ lists }: { lists: string[] }) {
           </datalist>
         </div>
         <fieldset className="flex flex-[1_1_220px] flex-col gap-1.5">
-          <legend className="mb-1.5 text-sm font-bold">등급 칸이 없을 때</legend>
+          <legend className="mb-1 text-sm font-bold">등급 칸이 없을 때</legend>
           <div className="flex gap-4">
             {(["general", "core"] as const).map((t) => (
               <label key={t} className="flex min-h-11 cursor-pointer items-center gap-2 text-sm">

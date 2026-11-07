@@ -330,7 +330,8 @@ export function SelectionBoard({
                       )}
                     </div>
                   </td>
-                  <td data-label="이력" className="max-w-[260px] px-3 py-3">
+                  {/* 휴대폰 카드: 첫 참여(이름 옆 표시)이고 기록이 없으면 이력 줄을 숨긴다 */}
+                  <td data-label="이력" className={`max-w-[260px] px-3 py-3 ${a.participation === 0 && !a.lastNote ? "stack-hide" : ""}`}>
                     <span className="flex flex-wrap gap-x-2 whitespace-nowrap">
                       <span>참여 {a.participation}회</span>
                       {a.noShow + a.late > 0 && (
@@ -345,7 +346,8 @@ export function SelectionBoard({
                       </span>
                     )}
                   </td>
-                  <td data-label="처리" className="px-4 py-2 max-md:pt-2">
+                  {/* 휴대폰 카드에서는 왼쪽 작은 제목 없이 버튼을 카드 폭 그대로 쓴다 */}
+                  <td className="px-4 py-2 max-md:pt-2">
                     {a.status === "cancelled" && (
                       <span className={`whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-bold ${APPLICATION_BADGE[a.status]}`}>{APPLICATION_STATUS_LABEL[a.status]}</span>
                     )}

@@ -150,9 +150,9 @@ function TodayCard({ events }: { events: EventProgress[] }) {
   if (events.length === 0) return null;
   return (
     <Card title="오늘 현장" tone="brand">
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col divide-y divide-brand/15">
         {events.map((e) => (
-          <li key={e.id} className="flex flex-col gap-3 rounded-lg bg-white p-3 sm:flex-row sm:items-center">
+          <li key={e.id} className="flex flex-col gap-3 py-2 first:pt-0 last:pb-0 sm:flex-row sm:items-center">
             <div className="flex min-w-0 flex-1 flex-col">
               <span className="font-bold">{e.title}</span>
               <span className="text-[13px] text-body">확정 {e.selected}명</span>
@@ -226,8 +226,9 @@ export default async function AdminHomePage() {
         </Card>
 
         <div className="flex flex-col gap-4">
-          <Card title="다음 지급일">
-            {pay ? (
+          {/* 예정된 지급이 없으면 칸을 만들지 않는다 */}
+          {pay && (
+            <Card title="다음 지급일">
               <div className="flex flex-col gap-2">
                 <p className="text-2xl font-bold">{formatEventDate(pay.date)}</p>
                 <p className="text-sm text-body">
@@ -245,10 +246,8 @@ export default async function AdminHomePage() {
                   이체 파일 받기·지급 완료 처리
                 </Link>
               </div>
-            ) : (
-              <p className="text-sm text-body">예정된 지급이 없어요.</p>
-            )}
-          </Card>
+            </Card>
+          )}
 
           <Card title="다가오는 일정">
             {upcoming.length === 0 ? (

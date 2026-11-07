@@ -171,50 +171,53 @@ function DayBoard({
                   </button>
                 ))}
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2 sm:ml-auto sm:justify-end">
-                {works(d.attendance) &&
-                  (showOvertime ? (
-                    <label className="flex items-center gap-1.5 text-sm text-body">
-                      초과
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        max={1440}
-                        step={10}
-                        value={d.minutes}
-                        onChange={(e) => set(r.id, { minutes: e.target.value })}
-                        aria-label={`${r.name} 초과 시간(분)`}
-                        className="h-11 w-20 rounded-lg border border-field bg-white px-2 text-right"
-                      />
-                      분
-                    </label>
-                  ) : (
-                    <button type="button" onClick={() => setOvertimeOpen((o) => ({ ...o, [r.id]: true }))} className="h-11 text-sm text-brand-strong underline underline-offset-4">
-                      + 초과 근무
-                    </button>
-                  ))}
-                <span className="text-right text-sm">
-                  {works(d.attendance) ? (
-                    <>
-                      <span className="block font-bold">{formatWon(pay.total + r.extras)}</span>
-                      <span className="text-[12px] text-muted">
-                        보수 {formatWon(pay.total)}
-                        {r.extras > 0 && ` + 추가 ${formatWon(r.extras)}`}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-muted">{d.attendance === "no_show" ? "지급 없음" : "출석을 골라 주세요"}</span>
-                  )}
-                </span>
-              </div>
+              {/* 출석을 고르기 전에는 금액 줄을 비워 두지 않고 아예 숨긴다 (카드 높이를 줄임) */}
+              {d.attendance !== "unknown" && (
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:ml-auto sm:justify-end">
+                  {works(d.attendance) &&
+                    (showOvertime ? (
+                      <label className="flex items-center gap-1.5 text-sm text-body">
+                        초과
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          max={1440}
+                          step={10}
+                          value={d.minutes}
+                          onChange={(e) => set(r.id, { minutes: e.target.value })}
+                          aria-label={`${r.name} 초과 시간(분)`}
+                          className="h-11 w-20 rounded-lg border border-field bg-white px-2 text-right"
+                        />
+                        분
+                      </label>
+                    ) : (
+                      <button type="button" onClick={() => setOvertimeOpen((o) => ({ ...o, [r.id]: true }))} className="h-11 text-sm text-brand-strong underline underline-offset-4">
+                        + 초과 근무
+                      </button>
+                    ))}
+                  <span className="text-right text-sm">
+                    {works(d.attendance) ? (
+                      <>
+                        <span className="block font-bold">{formatWon(pay.total + r.extras)}</span>
+                        <span className="text-[12px] text-muted">
+                          보수 {formatWon(pay.total)}
+                          {r.extras > 0 && ` + 추가 ${formatWon(r.extras)}`}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-muted">지급 없음</span>
+                    )}
+                  </span>
+                </div>
+              )}
             </li>
           );
         })}
       </ul>
 
-      {/* 휴대폰에서는 화면 아래에 붙어 있어 언제든 저장할 수 있다 */}
-      <div className="sticky bottom-0 -mx-1 flex flex-wrap items-center gap-3 rounded-t-xl border-t border-line bg-white/95 px-1 py-3 backdrop-blur">
+      {/* 화면 아래에 붙어 있어 언제든 저장할 수 있다 (휴대폰에서는 아래 탭 메뉴 바로 위) */}
+      <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 -mx-1 flex flex-wrap items-center gap-3 rounded-t-xl border-t border-line bg-white/95 px-1 py-3 backdrop-blur lg:bottom-0">
         <SubmitButton pendingText="저장 중…" disabled={!dirty} className="h-12 flex-1 text-[15px] sm:flex-none sm:px-8">
           {dirty ? `${changed.length}명 출석 저장` : "바꾼 것 없음"}
         </SubmitButton>

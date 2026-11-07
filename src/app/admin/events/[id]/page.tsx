@@ -333,13 +333,13 @@ function NextStep({ eventId, status, ended, next }: { eventId: string; status: E
     return (
       <Link
         href={`/admin/events/${eventId}?tab=${TASK_TEXT[next.kind].tab}`}
-        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border-2 border-warn/50 bg-warn-soft px-4 py-3 hover:border-warn"
+        className="flex items-center gap-3 rounded-xl border border-warn/40 bg-warn-soft px-4 py-3 hover:border-warn"
       >
-        <span className="flex min-w-0 flex-[1_1_220px] flex-col">
+        <span className="flex min-w-0 flex-1 flex-col">
           <span className="text-[13px] font-bold text-warn">다음 할 일</span>
           <span className="font-bold text-ink">{TASK_TEXT[next.kind].label(next.count)}</span>
         </span>
-        <span className="flex h-11 items-center rounded-lg bg-warn px-4 text-sm font-bold text-white">{TASK_TEXT[next.kind].action} →</span>
+        <span className="flex h-10 shrink-0 items-center rounded-lg bg-warn px-3 text-sm font-bold text-white">{TASK_TEXT[next.kind].action} →</span>
       </Link>
     );
   return (
@@ -543,11 +543,14 @@ export default async function EventDetailPage({
             {internal?.client_name && <span className="text-sm text-muted">· {internal.client_name}</span>}
           </div>
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{event.title}</h1>
-          <p className="text-[15px] text-body">
-            {formatEventRange(event.start_date, event.end_date)}
-            {event.location_name && ` · ${event.location_name}`}
-            {days.length > 1 && event.all_days_required && " · 모든 날짜 참여 필수"}
-          </p>
+          {/* 하루짜리 일정은 아래 날짜 줄과 겹치므로 장소가 있을 때만 보인다 */}
+          {(days.length > 1 || event.location_name) && (
+            <p className="text-[15px] text-body">
+              {days.length > 1 ? formatEventRange(event.start_date, event.end_date) : event.location_name}
+              {days.length > 1 && event.location_name && ` · ${event.location_name}`}
+              {days.length > 1 && event.all_days_required && " · 모든 날짜 참여 필수"}
+            </p>
+          )}
           <ul className="flex flex-col gap-1 text-sm text-body">
             {days.map((d) => {
               const count = selected.filter((a) => a.day_id === d.id).length;

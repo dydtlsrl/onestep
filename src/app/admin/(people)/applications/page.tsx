@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { PROFILE_COLUMNS, requireAdmin, TIER_LABEL, type MemberTier, type Profile } from "@/lib/auth";
 import { formatDateTime } from "@/lib/format";
 import { reportLoadError } from "@/lib/error-log";
@@ -51,24 +52,33 @@ export default async function ApplicationsPage() {
         {pending.map((p) => {
           const match = rosterByPhone.get(p.phone);
           return (
-          <li key={p.id} className="flex flex-col gap-3 rounded-xl border border-line bg-white p-5">
+          <li key={p.id} className="flex flex-col gap-3 rounded-xl border border-line bg-white p-4 sm:p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-lg font-bold">{p.name}</h2>
               <span className="text-sm text-muted">신청 {formatDateTime(p.created_at)}</span>
             </div>
-            <dl className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-1.5 text-sm">
+            {/* 비어 있는 선택 항목(지역·경력 사항·추천인·초대 링크)은 줄을 만들지 않는다 */}
+            <dl className="grid grid-cols-[72px_1fr] gap-x-3 gap-y-1.5 text-sm">
               <dt className="text-muted">휴대폰</dt>
               <dd>{formatPhone(p.phone)}</dd>
-              <dt className="text-muted">활동 지역</dt>
-              <dd>{p.region || "—"}</dd>
               <dt className="text-muted">경력</dt>
               <dd>{p.career_years}년</dd>
-              <dt className="text-muted">경력 사항</dt>
-              <dd className="whitespace-pre-line">{p.career_note || "—"}</dd>
-              <dt className="text-muted">추천인</dt>
-              <dd>{p.referrer_name || "—"}</dd>
-              <dt className="text-muted">초대 링크</dt>
-              <dd>{p.invites?.memo || "—"}</dd>
+              {(
+                [
+                  ["활동 지역", p.region],
+                  ["경력 사항", p.career_note],
+                  ["추천인", p.referrer_name],
+                  ["초대 링크", p.invites?.memo],
+                ] as const
+              ).map(
+                ([label, value]) =>
+                  value && (
+                    <Fragment key={label}>
+                      <dt className="text-muted">{label}</dt>
+                      <dd className="whitespace-pre-line">{value}</dd>
+                    </Fragment>
+                  ),
+              )}
             </dl>
             {match ? (
               <p className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand-strong">

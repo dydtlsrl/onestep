@@ -53,7 +53,7 @@ function SignOut({ className }: { className: string }) {
   );
 }
 
-// 컴퓨터(768px 이상): 왼쪽 세로 메뉴. 매일 쓰는 것과 설정을 나눠 둔다
+// 컴퓨터(1024px 이상): 왼쪽 세로 메뉴. 매일 쓰는 것과 설정을 나눠 둔다
 export function AdminSidebar({ pendingCount, name }: { pendingCount: number; name: string }) {
   const pathname = usePathname();
   const item = (link: NavLink) => {
@@ -76,7 +76,7 @@ export function AdminSidebar({ pendingCount, name }: { pendingCount: number; nam
   };
 
   return (
-    <div className="hidden w-56 shrink-0 border-r border-line bg-white md:block">
+    <div className="hidden w-56 shrink-0 border-r border-line bg-white lg:block">
       <nav aria-label="관리자 메뉴" className="sticky top-0 flex h-dvh flex-col gap-6 px-3 py-6">
         <Link href="/admin" className="flex flex-col gap-0.5 px-3">
           <span className="text-lg font-bold tracking-tight text-ink">원스텝</span>
@@ -95,7 +95,7 @@ export function AdminSidebar({ pendingCount, name }: { pendingCount: number; nam
   );
 }
 
-// 휴대폰: 화면 아래 탭 (엄지로 누르기 쉬운 자리). 설정과 로그아웃은 "더보기"에서 연다
+// 휴대폰·태블릿(1024px 미만): 화면 아래 탭 (엄지로 누르기 쉬운 자리). 설정과 로그아웃은 "더보기"에서 연다
 export function AdminTabBar({ pendingCount }: { pendingCount: number }) {
   const pathname = usePathname();
   // 더보기를 연 화면의 주소. 다른 화면으로 가면 주소가 달라져 저절로 닫힌다
@@ -114,12 +114,12 @@ export function AdminTabBar({ pendingCount }: { pendingCount: number }) {
   return (
     <>
       {moreOpen && (
-        <div className="fixed inset-0 z-30 bg-ink/30 md:hidden" onClick={() => setMoreOpen(false)}>
+        <div className="fixed inset-0 z-30 bg-ink/30 lg:hidden" onClick={() => setMoreOpen(false)}>
           <div
             id="admin-more"
             role="dialog"
             aria-label="더보기"
-            className="absolute inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] mx-3 mb-2 flex flex-col rounded-2xl bg-white p-2 shadow-lg"
+            className="absolute inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] mx-3 mb-2 flex flex-col rounded-2xl bg-white p-2 shadow-lg sm:mx-auto sm:w-full sm:max-w-sm"
             onClick={(e) => e.stopPropagation()}
           >
             {SETUP.map((link) => (
@@ -140,9 +140,9 @@ export function AdminTabBar({ pendingCount }: { pendingCount: number }) {
       )}
       <nav
         aria-label="관리자 메뉴"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
-        <ul className="flex h-16">
+        <ul className="mx-auto flex h-16 max-w-xl">
           {MAIN.map((link) => {
             const active = isActive(link, pathname) && !moreOpen;
             return (

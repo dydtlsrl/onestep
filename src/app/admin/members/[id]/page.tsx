@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Fragment } from "react";
 import { z } from "zod";
 import { requireAdmin, TIER_LABEL, type MemberRole, type MemberStatus, type MemberTier } from "@/lib/auth";
 import { formatDate, formatDateTime } from "@/lib/format";
@@ -107,23 +108,32 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-4">
           <Section title="신청 정보">
-            <dl className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-2 text-sm">
+            <dl className="grid grid-cols-[72px_1fr] gap-x-3 gap-y-2 text-sm">
               <dt className="text-muted">휴대폰</dt>
               <dd>
                 <a href={`tel:${member.phone}`} className="underline-offset-4 hover:underline">
                   {formatPhone(member.phone)}
                 </a>
               </dd>
-              <dt className="text-muted">활동 지역</dt>
-              <dd>{member.region || "—"}</dd>
               <dt className="text-muted">경력</dt>
               <dd>{member.career_years}년</dd>
-              <dt className="text-muted">경력 사항</dt>
-              <dd className="whitespace-pre-line">{member.career_note || "—"}</dd>
-              <dt className="text-muted">추천인</dt>
-              <dd>{member.referrer_name || "—"}</dd>
-              <dt className="text-muted">초대 링크</dt>
-              <dd>{member.invites?.memo || "—"}</dd>
+              {/* 비어 있는 선택 항목은 줄을 만들지 않는다 */}
+              {(
+                [
+                  ["활동 지역", member.region],
+                  ["경력 사항", member.career_note],
+                  ["추천인", member.referrer_name],
+                  ["초대 링크", member.invites?.memo],
+                ] as const
+              ).map(
+                ([label, value]) =>
+                  value && (
+                    <Fragment key={label}>
+                      <dt className="text-muted">{label}</dt>
+                      <dd className="whitespace-pre-line">{value}</dd>
+                    </Fragment>
+                  ),
+              )}
               <dt className="text-muted">신청일</dt>
               <dd>{formatDate(member.created_at)}</dd>
               <dt className="text-muted">승인일</dt>

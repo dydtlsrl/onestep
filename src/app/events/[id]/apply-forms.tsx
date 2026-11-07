@@ -11,6 +11,8 @@ export interface DayChoice {
   label: string; // 11/8(일) 진행
   timeText: string; // 집합 07:30 · 08:00–13:00
   payText: string; // 시급 11,000원 · 예상 55,000원
+  rateText: string; // 시급 11,000원
+  totalText: string; // 예상 55,000원
   remaining: number;
 }
 

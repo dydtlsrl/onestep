@@ -44,7 +44,7 @@ body {
     position: relative;
     padding: 0.875rem 1rem;
   }
-  .stack-table tr:has(> .stack-check) {
+  .stack-table tr:has(> .stack-check:not(:empty)) {
     padding-left: 3rem;
   }
   .stack-table td {

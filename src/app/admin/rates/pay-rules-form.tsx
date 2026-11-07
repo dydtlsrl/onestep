@@ -83,11 +83,13 @@ export function PayRulesForm({ rules }: { rules: PayRules }) {
           />
         </div>
       </div>
-      <p className="text-[13px] leading-relaxed text-muted">
+      {/* 긴 설명은 접어 두고 필요할 때 펼쳐 본다 */}
+      <details className="text-[13px] leading-relaxed text-muted">
+        <summary className="inline-flex min-h-10 cursor-pointer items-center font-bold text-body">계산 방법 설명 보기</summary>
         기본 시급은 새 일정의 날짜를 만들 때 처음 들어가는 단가예요 (예: 11,000원이면 세팅 4시간 44,000원, 8시간 88,000원). 일정마다 바꿀 수 있어요.
         예: 1시간 단위·버림이면 1시간 40분 초과는 1시간, 올림이면 2시간으로 계산해요. 최소 보장 시간은 시급 역할에만
         적용되고, 역할마다 따로 정할 수도 있어요. 0이면 보장 시간이 없어요.
-      </p>
+      </details>
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-[1_1_260px] flex-col gap-1.5">
           <label htmlFor="reason" className="text-sm font-bold">

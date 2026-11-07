@@ -82,6 +82,8 @@ async function loadEvent(supabase: Supabase, id: string, userId: string, tier: M
       label: dayLabel(d),
       timeText: timeText(d),
       payText: `${PAY_TYPE_LABEL[rate.payType]} ${formatWon(rate.rate)} · 예상 ${formatWon(total)}`,
+      rateText: `${PAY_TYPE_LABEL[rate.payType]} ${formatWon(rate.rate)}`,
+      totalText: `예상 ${formatWon(total)}`,
       remaining: Math.max(0, d.headcount - (selected.get(d.id) ?? 0)),
     };
   });
@@ -164,11 +166,12 @@ export default async function MemberEventPage({ params }: { params: Promise<{ id
           {days.map((d) => (
             <li key={d.id} className="flex items-center justify-between gap-3 rounded-lg bg-ground px-4 py-3">
               <span className="flex flex-col">
-                <span className="font-bold">{multiDay ? d.label : d.timeText}</span>
+                {/* 하루짜리는 시간이 위 카드에 있으므로 예상 보수를 크게, 단가를 작게 */}
+                <span className="font-bold">{multiDay ? d.label : d.totalText}</span>
                 {multiDay && <span className="text-[13px] text-body">{d.timeText}</span>}
-                <span className="text-[13px] text-body">{d.payText}</span>
+                <span className="text-[13px] text-body">{multiDay ? d.payText : d.rateText}</span>
               </span>
-              <span className="text-[13px] text-muted">{d.remaining > 0 ? `${d.remaining}자리 남음` : "다 찼어요"}</span>
+              <span className="shrink-0 whitespace-nowrap text-[13px] text-muted">{d.remaining > 0 ? `${d.remaining}자리 남음` : "다 찼어요"}</span>
             </li>
           ))}
         </ul>
